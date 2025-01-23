@@ -107,6 +107,7 @@ void  MotionDeformationApp::Initialize()
 
 	// フリレベル・キレレベルの設定
 	furi = 5.0f;
+	furi = -4.0f;
 	kire = 10.0f;
 
 	// 動作変形情報の初期化
@@ -1210,32 +1211,21 @@ void  InitDeformationParameter(
 
 		// 何フレーム前かの姿勢情報を取得(値は仮のもの)
 		Posture before_posture = param.org_pose;
-		
-		// フリレベルの成分を分解
-		int furi_frame = (int)furi;
-		float furi_weight = furi - furi_frame;
 
 		// 取得するフレームの時間
-		float before_time = param.key_time - (furi_frame * motion.interval);
+		float before_time = param.key_time -  motion.interval;
 
-		// 計算用変数
-		Posture p1;
-		Posture p2;
 		// 何フレーム前かの姿勢情報を取得
-		motion.GetPosture(before_time, p1);
-		motion.GetPosture(before_time  + motion.interval, p2);
+		motion.GetPosture(before_time, before_posture);
 
-		// フリレベルに対応した基準動作を取得
-		PostureInterpolation(p1, p2, furi_weight, before_posture);
-
-		// 基準動作の順運動学計算
+		// 数フレーム前の姿勢の順運動学計算
 		static vector< Matrix4f >  before_seg_frame_array;
 		vector< Point3f >  before_joint_position_frame_array;
 
 		ForwardKinematics(before_posture, before_seg_frame_array, before_joint_position_frame_array);
 
-		// 末端部位ごとにモーションワーピングで後のキー時刻の姿勢を変形する
-		for(int i = 0; i < NUM_PRIMARY_SEGMENTS; i++)
+		// 末端部位ごとにモーションワーピング後のキー時刻の姿勢を変形する
+		for (int i = 0; i < NUM_PRIMARY_SEGMENTS; i++)
 		{
 			// 末端部位の位置を取得
 			Point3f segment_positions[NUM_PRIMARY_SEGMENTS];
@@ -1252,9 +1242,16 @@ void  InitDeformationParameter(
 				before_segment_positions[i] = before_vec;
 			}
 
-			Point3f  ee_pos;
+			// 末端部位の位置から末端部位の移動の向きを計算
+			Vector3f move_vec;
+			move_vec = segment_positions[i] - before_segment_positions[i];
+
+			// フリレベルを倍率として移動距離を設定
+			move_vec = move_vec * furi;
+
+			Point3f ee_pos;
 			ee_pos = segment_positions[i];
-			ee_pos += before_vec - vec;
+			ee_pos += move_vec;
 			ApplyInverseKinematicsCCD(param.key_pose, -1, seg_no, ee_pos);
 		}
 	}
