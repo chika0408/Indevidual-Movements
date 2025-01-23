@@ -212,6 +212,8 @@ void  MotionDeformationEditApp::Display()
 		sprintf( message, "%.2f (%d)", animation_time, frame_no );
 		DrawTextInformation( 2, message );
 	}
+	sprintf(message, "animation_speed = %.1f", animation_speed);
+	DrawTextInformation( 3, message);
 }
 
 
@@ -342,10 +344,6 @@ void  MotionDeformationEditApp::Keyboard( unsigned char key, int mx, int my )
 		if ( key == 's' )
 			on_animation = !on_animation;
 
-		// w キーでアニメーションの再生速度を変更
-		if ( key == 'w' )
-			animation_speed = ( animation_speed == 1.0f ) ? 0.1f : 1.0f;
-
 		// n キーで次のフレーム
 		if ( ( key == 'n' ) && !on_animation && motion )
 		{
@@ -361,6 +359,14 @@ void  MotionDeformationEditApp::Keyboard( unsigned char key, int mx, int my )
 			Animation( - motion->interval );
 			on_animation = false;
 		}
+
+		// lキーで再生速度を上げる
+		if (key == 'l')
+			animation_speed += 0.1f;
+
+		// jキーで再生速度を下げる
+		if (key == 'j')
+			animation_speed -= 0.1f;
 	}
 
 	// キー姿勢編集モード中の操作
