@@ -29,6 +29,7 @@ MotionDeformationEditApp::MotionDeformationEditApp() : MotionDeformationApp()
 
 	on_animation_mode = true;
 	on_keypose_edit_mode = false;
+	//root_diff = (100000,0,0);
 }
 
 
@@ -150,9 +151,17 @@ void  MotionDeformationEditApp::Display()
 		if (second_curr_posture)
 		{
 			glPushMatrix();
+			
+			//腰の位置を基準に２つの動作の位置を合わせる
+			//計算用変数
+			if (root_diff.x == NULL) {
+				Point3f p1, p2;
+				p1 = deformed_posture->root_pos;
+				p2 = second_curr_posture->root_pos;
 
-			//steplong_Char00の腰の位置が違ったので強引に修正
-			glTranslatef(0.0f, 0.0f, 0.3f);
+				root_diff = p1 - p2;
+			}
+			glTranslatef(root_diff.x, root_diff.y, root_diff.z);
 
 			glEnable(GL_BLEND);
 			glColor4f(1.0f, 0.0f, 1.0f, 0.5f);

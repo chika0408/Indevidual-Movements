@@ -38,7 +38,7 @@ MotionDeformationApp::MotionDeformationApp() : InverseKinematicsCCDApp()
 	animation_speed = 1.0f;
 	frame_no = 0;
 	before_frame_time = 0.0f;
-	move_amount = 3.1f;
+	move_amount = 5.1f;
 
 	second_motion = NULL;
 	second_curr_posture = NULL;
@@ -107,7 +107,6 @@ void  MotionDeformationApp::Initialize()
 
 	// フリレベル・キレレベルの設定
 	furi = 5.0f;
-	furi = -4.0f;
 	kire = 10.0f;
 
 	// 動作変形情報の初期化
@@ -410,11 +409,11 @@ void  MotionDeformationApp::InitMotion( int no )
 	if ( no == 0 )
 	{
 		// サンプルBVH動作データを読み込み
-		//LoadBVH("fight_punch.bvh"); //move_amount = 5.2
-		LoadBVH( "stepshort_new_Char00.bvh" ); //move_amount = 2.79
-		//LoadBVH("sample_walking1.bvh");
+		//LoadBVH( "stepshort_new_Char00.bvh" ); //move_amount = 2.79 or 3.1
+		LoadBVH("radio_middle_1_Char00.bvh"); //move_amount = 5.1
 
-		LoadSecondBVH("steplong_Char00.bvh");
+		//LoadSecondBVH("steplong_Char00.bvh");
+		LoadSecondBVH("radio_long_1_Char00.bvh");
 		if ( !motion )
 			return;
 	}

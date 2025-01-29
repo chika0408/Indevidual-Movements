@@ -32,8 +32,11 @@ class  MotionDeformationEditApp : public  MotionDeformationApp
 
 	// キー姿勢編集モードかを表すフラグ
 	bool               on_keypose_edit_mode;
-
 	// 逆運動学計算によるキー姿勢の編集には基底クラス（InverseKinematicsCCDApp）の変数・メソッドを使用
+
+  protected:
+	//２つの動作の位置を合わせるための変数
+	Point3f			   root_diff;
 
 
   public:
