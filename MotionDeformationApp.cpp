@@ -38,7 +38,7 @@ MotionDeformationApp::MotionDeformationApp() : InverseKinematicsCCDApp()
 	animation_speed = 1.0f;
 	frame_no = 0;
 	before_frame_time = 0.0f;
-	move_amount = 5.1f;
+	move_amount = 5.45f;
 
 	second_motion = NULL;
 	second_curr_posture = NULL;
@@ -106,7 +106,7 @@ void  MotionDeformationApp::Initialize()
 	CheckDistance(*motion, distanceinfo, move_amount, primary_segment_names);
 
 	// フリレベル・キレレベルの設定
-	furi = 5.0f;
+	furi = -10.0f;
 	kire = 10.0f;
 
 	// 動作変形情報の初期化
@@ -374,7 +374,7 @@ void  MotionDeformationApp::Animation( float delta )
 		animation_time -= motion->GetDuration();
 
 	// 現在のフレーム番号を計算
-	//frame_no = animation_time / motion->interval;
+	frame_no = animation_time / motion->interval;
 
 	// 動作データから現在時刻の姿勢を取得
 	motion->GetPosture( animation_time, *org_posture );
@@ -410,10 +410,13 @@ void  MotionDeformationApp::InitMotion( int no )
 	{
 		// サンプルBVH動作データを読み込み
 		//LoadBVH( "stepshort_new_Char00.bvh" ); //move_amount = 2.79 or 3.1
-		LoadBVH("radio_middle_1_Char00.bvh"); //move_amount = 5.1
+		//LoadBVH("radio_middle_1_Char00.bvh"); //move_amount = 5.1
+		//LoadBVH("radio_middle_2_Char00.bvh"); //move_amount = 5.0 or 5.1
+		//LoadBVH("radio_middle_3_Char00.bvh"); //move_amount = 5.45
+		LoadBVH("radio_middle_4_Char00.bvh"); //move_amount = 5.45
 
 		//LoadSecondBVH("steplong_Char00.bvh");
-		LoadSecondBVH("radio_long_1_Char00.bvh");
+		LoadSecondBVH("radio_long_4_Char00.bvh");
 		if ( !motion )
 			return;
 	}
