@@ -201,6 +201,14 @@ void  GLUTBaseApp::MouseDrag( int mx, int my )
 		is_view_updated = true;
 	}
 
+	// 左ボタンのドラッグ中は視点を前後左右に移動する
+	if (drag_mouse_l && !(mod & GLUT_ACTIVE_SHIFT))
+	{
+		// 前回のマウス座標と今回のマウス座標の差に応じて中心点を移動
+		view_center.x += (mx - last_mouse_x) * 0.01;
+		view_center.z += (my - last_mouse_y) * 0.01;
+	}
+
 	// 今回のマウス座標を記録
 	last_mouse_x = mx;
 	last_mouse_y = my;
