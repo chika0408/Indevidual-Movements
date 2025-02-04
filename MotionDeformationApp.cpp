@@ -38,7 +38,7 @@ MotionDeformationApp::MotionDeformationApp() : InverseKinematicsCCDApp()
 	animation_speed = 1.0f;
 	frame_no = 0;
 	before_frame_time = 0.0f;
-	move_amount = 5.45f;
+	move_amount = 3.1f;
 
 	second_motion = NULL;
 	second_curr_posture = NULL;
@@ -409,14 +409,14 @@ void  MotionDeformationApp::InitMotion( int no )
 	if ( no == 0 )
 	{
 		// サンプルBVH動作データを読み込み
-		//LoadBVH( "stepshort_new_Char00.bvh" ); //move_amount = 2.79 or 3.1
+		LoadBVH( "stepshort_new_Char00.bvh" ); //move_amount = 2.79 or 3.1
 		//LoadBVH("radio_middle_1_Char00.bvh"); //move_amount = 5.1
 		//LoadBVH("radio_middle_2_Char00.bvh"); //move_amount = 5.0 or 5.1
 		//LoadBVH("radio_middle_3_Char00.bvh"); //move_amount = 5.45
-		LoadBVH("radio_middle_4_Char00.bvh"); //move_amount = 5.45
+		//LoadBVH("radio_middle_4_Char00.bvh"); //move_amount = 5.45
 
-		//LoadSecondBVH("steplong_Char00.bvh");
-		LoadSecondBVH("radio_long_4_Char00.bvh");
+		LoadSecondBVH("steplong_Char00.bvh");
+		//LoadSecondBVH("radio_long_1_Char00.bvh");
 		if ( !motion )
 			return;
 	}
@@ -1303,16 +1303,19 @@ float  ApplyMotionDeformation( float time, const MotionWarpingParam & deform, Mo
 	// タイムワーピング後の現在時刻
 	float warping_time = 0.00;
 
+	// タイムワーピング処理後の現在時刻の姿勢
+	Posture warping_pose;
+
 	// もし現在時刻にタイムワーピングを適用するなら
 	if (time > time_param.warp_in_duration_time && time < time_param.warp_out_duration_time) {
 		// タイムワーピング後の現在時刻を計算
 		warping_time = Warping(time, time_param);
-		// 現在時刻の姿勢を計算
-		motion.GetPosture(warping_time, input_pose);
+		// タイムワーピング後の現在時刻の姿勢を計算
+		motion.GetPosture(warping_time, warping_pose);
 	}
 	else {
 		warping_time = time;
-		motion.GetPosture(time, input_pose);
+		motion.GetPosture(time, warping_pose);
 	}
 
 	// 動作変形の範囲外であれば、入力姿勢を出力姿勢とする
@@ -1332,7 +1335,7 @@ float  ApplyMotionDeformation( float time, const MotionWarpingParam & deform, Mo
 
 
 	// 姿勢変形（２つの姿勢の差分（dest - src）に重み ratio をかけたものを元の姿勢 org に加える ）
-	PostureWarping( input_pose, deform.org_pose, deform.key_pose, ratio, output_pose );
+	PostureWarping( warping_pose, deform.org_pose, deform.key_pose, ratio, output_pose );
 
 	return  ratio;
 }
