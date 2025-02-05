@@ -17,6 +17,10 @@
 #include "HumanBody.h"
 #include <vector>
 
+// csvファイル作成のため
+#include <fstream>
+#include <iostream>
+
 // 標準算術関数・定数の定義
 #define  _USE_MATH_DEFINES
 #include <math.h>
@@ -38,7 +42,7 @@ MotionDeformationApp::MotionDeformationApp() : InverseKinematicsCCDApp()
 	animation_speed = 1.0f;
 	frame_no = 0;
 	before_frame_time = 0.0f;
-	move_amount = 3.1f;
+	move_amount = 0.01f;
 
 	second_motion = NULL;
 	second_curr_posture = NULL;
@@ -94,16 +98,26 @@ void  MotionDeformationApp::Initialize()
 
 	// 解析を行う動作データの骨格の、主要体節の名前を設定
 	const char * primary_segment_names[NUM_PRIMARY_SEGMENTS];
-	primary_segment_names[SEG_R_FOOT] = "RightAnkle";
-	primary_segment_names[SEG_L_FOOT] = "LeftAnkle";
-	primary_segment_names[SEG_R_HAND] = "RightWrist";
-	primary_segment_names[SEG_L_HAND] = "LeftWrist";
+	primary_segment_names[SEG_R_FOOT] = "RightFoot";
+	primary_segment_names[SEG_L_FOOT] = "LeftFoot";
+	primary_segment_names[SEG_R_HAND] = "RightHand";
+	primary_segment_names[SEG_L_HAND] = "LeftHand";
 	primary_segment_names[SEG_PELVIS] = "Hips";
-	primary_segment_names[SEG_CHEST] = "Chest";
+	primary_segment_names[SEG_CHEST] = "Spine3"; //chest
 	primary_segment_names[SEG_HEAD] = "Head";
 
 	// 末端部位の移動距離の合計をフレーム毎に配列として出力
 	CheckDistance(*motion, distanceinfo, move_amount, primary_segment_names);
+
+	// 確認のためにdistanceinfoをcsvファイルに書き出す
+	std::ofstream outputfile("output.csv");
+	for (auto&& b : distanceinfo) {
+		outputfile << b.distanceadd;
+		outputfile << ',';
+		outputfile << b.movecheck;
+		outputfile << '\n';
+	}
+	outputfile.close();
 
 	// フリレベル・キレレベルの設定
 	furi = -10.0f;
@@ -409,14 +423,16 @@ void  MotionDeformationApp::InitMotion( int no )
 	if ( no == 0 )
 	{
 		// サンプルBVH動作データを読み込み
-		LoadBVH( "stepshort_new_Char00.bvh" ); //move_amount = 2.79 or 3.1
-		//LoadBVH("radio_middle_1_Char00.bvh"); //move_amount = 5.1
+		//LoadBVH( "stepshort_new_Char00.bvh" ); //move_amount = 2.79 or 3.1
+		LoadBVH("radio_middle_1_Char00.bvh"); //move_amount = 5.1
 		//LoadBVH("radio_middle_2_Char00.bvh"); //move_amount = 5.0 or 5.1
 		//LoadBVH("radio_middle_3_Char00.bvh"); //move_amount = 5.45
 		//LoadBVH("radio_middle_4_Char00.bvh"); //move_amount = 5.45
+		//LoadBVH("radio_middle_6_Char00.bvh"); //move_amount = 5.0
+		//LoadBVH("radio_middle_8_Char00.bvh"); //move_amount = 5.45
 
-		LoadSecondBVH("steplong_Char00.bvh");
-		//LoadSecondBVH("radio_long_1_Char00.bvh");
+		//LoadSecondBVH("steplong_Char00.bvh");
+		LoadSecondBVH("radio_long_1_Char00.bvh");
 		if ( !motion )
 			return;
 	}
@@ -627,6 +643,13 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, float mo
 			}
 		}
 
+		// もし初めのフレームなら前フレームの主要体節の位置を現在の位置と同一に設定
+		if (animation_time == 0)
+		{
+			for (int i = 0; i < NUM_PRIMARY_SEGMENTS; i++)
+				before_segment_positions[i] = segment_positions[i];
+		}
+
 		// 両手足のフレーム間の距離を計算
 		float right_ankle_dist = segment_positions[0].distance(before_segment_positions[0]);
 		float left_ankle_dist = segment_positions[1].distance(before_segment_positions[1]);
@@ -677,7 +700,14 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, float mo
 		// 現フレームの情報を格納する
 		param.push_back(d);
 	}
-
+	// movecheckの外れ値対策
+	// 前後のmovecheckが一致しているならそれに合わせる
+	// movestartには影響しない……よね？
+	for (int i = 1; i < param.size() - 1; i++)
+	{
+		if (param[i - 1].movecheck == param[i + 1].movecheck)
+			param[i].movecheck = param[i - 1].movecheck;
+	}
 }
 
 //
@@ -973,10 +1003,12 @@ float Warping(float now_time, TimeWarpingParam& deform)
 	float after_key_native_time = (deform.after_key_time - deform.warp_in_duration_time) / (deform.warp_out_duration_time - deform.warp_in_duration_time);
 
 	// 最低でも2割は動いている時間にする
+	/*
 	if (after_key_native_time < 0.2)
 	{
 		after_key_native_time = 0.2;
 	}
+	*/
 
 	float warping_native_time; // タイムワーピング実行後の正規化時刻
 
@@ -993,7 +1025,7 @@ float Warping(float now_time, TimeWarpingParam& deform)
 		float now_key_native_time = (now_time - deform.warp_key_time) / (deform.warp_out_duration_time - deform.warp_key_time);
 
 		warping_native_time =
-			before_key_native_time * (after_key_native_time / before_key_native_time) +
+			after_key_native_time +
 			(now_native_time - before_key_native_time) * ((1 - after_key_native_time) / (1 - before_key_native_time));
 	}
 
@@ -1066,6 +1098,10 @@ void  InitDeformationParameter(
 	else{
 		now_frame = now_time / motion.interval;
 	}
+
+	// 応急処置
+	if (now_frame >= motion.num_frames)
+		now_frame = motion.num_frames -1;
 
 
 	// 動作が始まっているならワーピングを開始
@@ -1235,7 +1271,7 @@ void  InitDeformationParameter(
 			Vector3f vec;
 			Vector3f before_vec;
 
-			int seg_no = Getseg(i);
+			int seg_no = Getseg(i);//human_body->GetPrimarySegment((PrimarySegmentType)i);
 			if (seg_no != -1)
 			{
 				seg_frame_array[seg_no].get(&vec);
