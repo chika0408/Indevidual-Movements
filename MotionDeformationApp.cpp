@@ -635,7 +635,7 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, float mo
 		ForwardKinematics(*curr_posture, segment_frames);
 		for (int i = 0; i < NUM_PRIMARY_SEGMENTS; i++) 
 		{
-			int seg_no = Getseg(i);
+			int seg_no = human_body->GetPrimarySegment((PrimarySegmentType)i);
 			if (seg_no != -1)
 			{
 				segment_frames[seg_no].get(&vec);
@@ -708,47 +708,6 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, float mo
 		if (param[i - 1].movecheck == param[i + 1].movecheck)
 			param[i].movecheck = param[i - 1].movecheck;
 	}
-}
-
-//
-// GetPrimarySegmentが動かないので応急処置
-// 末端部位のseg_noを取得する
-//
-int Getseg(int i)
-{
-	/*
-	if (i == 0) //RightHand
-		return 17;
-	else if (i == 1)
-		return 14;
-	else if (i == 2)
-		return 11;
-	else if (i == 3)
-		return 7;
-	else if (i == 4)
-		return 0;
-	else if (i == 5)
-		return 1;
-	else if (i == 6)
-		return 3;
-	*/
-	
-	//*
-	if (i == 0) //RightAnkle
-		return 2;
-	else if (i == 1) //LeftAnkle
-		return 5;
-	else if (i == 2) //RightWrist
-		return 15;
-	else if (i == 3) //LeftWrist
-		return 38;
-	else if (i == 4) //Hips
-		return 0;
-	else if (i == 5) //Chest
-		return 8;
-	else if (i == 6) //Head
-		return 11;
-	//*/
 }
 
 
@@ -1262,6 +1221,26 @@ void  InitDeformationParameter(
 
 		ForwardKinematics(before_posture, before_seg_frame_array, before_joint_position_frame_array);
 
+		// 骨格の追加情報を生成
+		// キャラクタの骨格情報
+		HumanBody* human_body;
+
+		human_body = new HumanBody(motion.body);
+
+		const char * primary_segment_names[NUM_PRIMARY_SEGMENTS];
+		primary_segment_names[SEG_R_FOOT] = "RightFoot";
+		primary_segment_names[SEG_L_FOOT] = "LeftFoot";
+		primary_segment_names[SEG_R_HAND] = "RightHand";
+		primary_segment_names[SEG_L_HAND] = "LeftHand";
+		primary_segment_names[SEG_PELVIS] = "Hips";
+		primary_segment_names[SEG_CHEST] = "Spine3"; //chest
+		primary_segment_names[SEG_HEAD] = "Head";
+
+		for (int i = 0; i < NUM_PRIMARY_SEGMENTS; i++)
+		{
+			human_body->SetPrimarySegment((PrimarySegmentType)i, primary_segment_names[i]);
+		}
+
 		// 末端部位ごとにモーションワーピング後のキー時刻の姿勢を変形する
 		for (int i = 0; i < NUM_PRIMARY_SEGMENTS; i++)
 		{
@@ -1271,7 +1250,7 @@ void  InitDeformationParameter(
 			Vector3f vec;
 			Vector3f before_vec;
 
-			int seg_no = Getseg(i);//human_body->GetPrimarySegment((PrimarySegmentType)i);
+			int seg_no = human_body->GetPrimarySegment((PrimarySegmentType)i);
 			if (seg_no != -1)
 			{
 				seg_frame_array[seg_no].get(&vec);
