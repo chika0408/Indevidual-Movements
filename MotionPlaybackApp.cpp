@@ -57,7 +57,7 @@ void  MotionPlaybackApp::Initialize()
 
 	// サンプルBVH動作データを読み込み
 	//LoadBVH("fight_punch.bvh");
-	LoadBVH( "steplong_Char00.bvh" );
+	LoadBVH( "radio_middle_1_Char00.bvh" );
 }
 
 

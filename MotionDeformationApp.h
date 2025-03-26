@@ -118,6 +118,9 @@ class  MotionDeformationApp : public InverseKinematicsCCDApp
 	// ２つ目の動作データの姿勢
 	Posture*	second_curr_posture;
 
+	// モーションワーピングの重み表示用
+	float		weight;
+
 
   protected:
 	// 動作再生のための変数

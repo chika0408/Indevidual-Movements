@@ -223,6 +223,9 @@ void  MotionDeformationEditApp::Display()
 	}
 	sprintf(message, "animation_speed = %.1f", animation_speed);
 	DrawTextInformation( 3, message);
+
+	sprintf(message, "weight = %.2f", weight);
+	DrawTextInformation(4, message);
 }
 
 

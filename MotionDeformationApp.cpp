@@ -104,7 +104,7 @@ void  MotionDeformationApp::Initialize()
 	primary_segment_names[SEG_L_HAND] = "LeftHand";
 	primary_segment_names[SEG_PELVIS] = "Hips";
 	primary_segment_names[SEG_CHEST] = "Spine3"; //chest
-	primary_segment_names[SEG_HEAD] = "Head";
+	primary_segment_names[SEG_HEAD] = "Neck";
 
 	// 末端部位の移動距離の合計をフレーム毎に配列として出力
 	CheckDistance(*motion, distanceinfo, move_amount, primary_segment_names);
@@ -120,7 +120,7 @@ void  MotionDeformationApp::Initialize()
 	outputfile.close();
 
 	// フリレベル・キレレベルの設定
-	furi = -10.0f;
+	furi = -30.0f;
 	kire = 10.0f;
 
 	// 動作変形情報の初期化
@@ -403,7 +403,7 @@ void  MotionDeformationApp::Animation( float delta )
 	ApplyTimeWarping(animation_time, timewarp_deformation, *motion, before_frame_time, *deformed_posture);
 
 	// 動作変形（動作ワーピング）の適用後の姿勢の計算
-	ApplyMotionDeformation( animation_time, deformation, *motion, *org_posture, timewarp_deformation, *deformed_posture );
+	weight = ApplyMotionDeformation( animation_time, deformation, *motion, *org_posture, timewarp_deformation, *deformed_posture );
 
 	// ２つ目の動作の姿勢を取得
  	second_motion->GetPosture(animation_time, *second_curr_posture);
@@ -424,15 +424,15 @@ void  MotionDeformationApp::InitMotion( int no )
 	{
 		// サンプルBVH動作データを読み込み
 		//LoadBVH( "stepshort_new_Char00.bvh" ); //move_amount = 2.79 or 3.1
-		LoadBVH("radio_middle_1_Char00.bvh"); //move_amount = 5.1
+		//LoadBVH("radio_middle_1_Char00.bvh"); //move_amount = 5.1
 		//LoadBVH("radio_middle_2_Char00.bvh"); //move_amount = 5.0 or 5.1
-		//LoadBVH("radio_middle_3_Char00.bvh"); //move_amount = 5.45
+		LoadBVH("radio_middle_3_Char00.bvh"); //move_amount = 5.45
 		//LoadBVH("radio_middle_4_Char00.bvh"); //move_amount = 5.45
 		//LoadBVH("radio_middle_6_Char00.bvh"); //move_amount = 5.0
 		//LoadBVH("radio_middle_8_Char00.bvh"); //move_amount = 5.45
 
 		//LoadSecondBVH("steplong_Char00.bvh");
-		LoadSecondBVH("radio_long_1_Char00.bvh");
+		LoadSecondBVH("radio_long_3_Char00.bvh");
 		if ( !motion )
 			return;
 	}
@@ -872,6 +872,8 @@ void  InitTimeDeformationParameter(
 
 		// ワーピング後のキー時刻の正規化時間を計算
 		float after_key_native_time = warp_key_native_time * (1 + (kire / 100) );
+		if (after_key_native_time >= 1)
+			after_key_native_time = 1.0f;
 
 		// ワーピング後のキー時刻を計算
 		param.after_key_time =
@@ -961,14 +963,6 @@ float Warping(float now_time, TimeWarpingParam& deform)
 	float before_key_native_time = (deform.warp_key_time - deform.warp_in_duration_time) / (deform.warp_out_duration_time - deform.warp_in_duration_time);
 	float after_key_native_time = (deform.after_key_time - deform.warp_in_duration_time) / (deform.warp_out_duration_time - deform.warp_in_duration_time);
 
-	// 最低でも2割は動いている時間にする
-	/*
-	if (after_key_native_time < 0.2)
-	{
-		after_key_native_time = 0.2;
-	}
-	*/
-
 	float warping_native_time; // タイムワーピング実行後の正規化時刻
 
 	if (now_native_time <= before_key_native_time)
@@ -977,6 +971,12 @@ float Warping(float now_time, TimeWarpingParam& deform)
 		float now_key_native_time = (now_time - deform.warp_in_duration_time) / (deform.warp_key_time - deform.warp_in_duration_time);
 
 		warping_native_time = now_native_time * (after_key_native_time / before_key_native_time);
+
+		printf("after_key_native_time:%f\n", after_key_native_time);
+		printf("before_key_native_time:%f\n", before_key_native_time);
+		printf("now_key_native_time:%f\n", now_key_native_time);
+		printf("warping_native_time:%f\n", warping_native_time);
+
 	}
 	else
 	{
@@ -985,7 +985,7 @@ float Warping(float now_time, TimeWarpingParam& deform)
 
 		warping_native_time =
 			after_key_native_time +
-			(now_native_time - before_key_native_time) * ((1 - after_key_native_time) / (1 - before_key_native_time));
+			(1 - after_key_native_time) * ((now_native_time - before_key_native_time) / (1 - before_key_native_time));
 	}
 
 	// タイムワーピング実行後の時刻を計算して返す	
@@ -1234,7 +1234,7 @@ void  InitDeformationParameter(
 		primary_segment_names[SEG_L_HAND] = "LeftHand";
 		primary_segment_names[SEG_PELVIS] = "Hips";
 		primary_segment_names[SEG_CHEST] = "Spine3"; //chest
-		primary_segment_names[SEG_HEAD] = "Head";
+		primary_segment_names[SEG_HEAD] = "Neck";
 
 		for (int i = 0; i < NUM_PRIMARY_SEGMENTS; i++)
 		{
@@ -1333,6 +1333,8 @@ float  ApplyMotionDeformation( float time, const MotionWarpingParam & deform, Mo
 		motion.GetPosture(time, warping_pose);
 	}
 
+	//printf("%f\n", warping_time);
+
 	// 動作変形の範囲外であれば、入力姿勢を出力姿勢とする
 	if ( ( warping_time < deform.key_time - deform.blend_in_duration ) || 
 	     ( warping_time > deform.key_time + deform.blend_out_duration ) )
@@ -1344,9 +1346,9 @@ float  ApplyMotionDeformation( float time, const MotionWarpingParam & deform, Mo
 	// 姿勢変形（動作ワーピング）の重みを計算
 	float  ratio = 0.0f;
 	if(warping_time <= deform.key_time)
-		ratio = (time -(deform.key_time - deform.blend_in_duration)) / (deform.blend_in_duration);
+		ratio = (warping_time - deform.blend_in_duration) / (deform.key_time - deform.blend_in_duration);
 	if(warping_time > deform.key_time)
-		ratio = (deform.blend_out_duration - (time - deform.key_time)) / (deform.blend_out_duration);
+		ratio = (deform.blend_out_duration - warping_time) / (deform.blend_out_duration - deform.key_time);
 
 
 	// 姿勢変形（２つの姿勢の差分（dest - src）に重み ratio をかけたものを元の姿勢 org に加える ）
