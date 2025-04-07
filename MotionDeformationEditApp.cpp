@@ -111,7 +111,7 @@ void  MotionDeformationEditApp::Display()
 		{
 			glPushMatrix();
 
-			glColor3f( 0.5f, 1.0f, 0.5f );
+			glColor3f( 0.5f, 1.0f, 0.5f);
 			DrawPosture( *deformed_posture );
 			DrawPostureShadow( *deformed_posture, shadow_dir, shadow_color );
 
@@ -159,7 +159,8 @@ void  MotionDeformationEditApp::Display()
 				p1 = deformed_posture->root_pos;
 				p2 = second_curr_posture->root_pos;
 
-				root_diff = p1 - p2;
+				if (p1.x > -100000)
+					root_diff = p1 - p2;
 			}
 			glTranslatef(root_diff.x, root_diff.y, root_diff.z);
 
