@@ -38,6 +38,9 @@ struct DistanceParam
 	// 動作が開始したかどうかを判断する
 	// 動作が開始しているときはtrue
 	bool move_start;
+
+	// 動作が動いているかどうかの閾値
+	float move_amount;
 };
 
 

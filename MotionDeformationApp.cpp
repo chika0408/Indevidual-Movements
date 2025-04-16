@@ -114,7 +114,7 @@ void  MotionDeformationApp::Initialize()
 	for (auto&& b : distanceinfo) {
 		outputfile << b.distanceadd;
 		outputfile << ',';
-		outputfile << b.movecheck;
+		outputfile << b.move_amount;
 		outputfile << '\n';
 	}
 	outputfile.close();
@@ -423,16 +423,16 @@ void  MotionDeformationApp::InitMotion( int no )
 	if ( no == 0 )
 	{
 		// サンプルBVH動作データを読み込み
-		LoadBVH( "stepshort_new_Char00.bvh" ); //move_amount = 2.79 or 3.1
+		//LoadBVH( "stepshort_new_Char00.bvh" ); //move_amount = 2.79 or 3.1
 		//LoadBVH("radio_middle_1_Char00.bvh"); //move_amount = 5.1
 		//LoadBVH("radio_middle_2_Char00.bvh"); //move_amount = 5.0 or 5.1
-		//LoadBVH("radio_middle_3_Char00.bvh"); //move_amount = 5.45
+		LoadBVH("radio_middle_3_Char00.bvh"); //move_amount = 5.45
 		//LoadBVH("radio_middle_4_Char00.bvh"); //move_amount = 5.45
 		//LoadBVH("radio_middle_6_Char00.bvh"); //move_amount = 5.0
 		//LoadBVH("radio_middle_8_Char00.bvh"); //move_amount = 5.45
 
-		LoadSecondBVH("steplong_Char00.bvh");
-		//LoadSecondBVH("radio_long_3_Char00.bvh");
+		//LoadSecondBVH("steplong_Char00.bvh");
+		LoadSecondBVH("radio_long_3_Char00.bvh");
 		if ( !motion )
 			return;
 	}
@@ -618,7 +618,7 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, float mo
 	Point3f before_segment_positions[NUM_PRIMARY_SEGMENTS] ; // 前フレームの主要体節の位置
 
 	// 末端部位の位置を取得
-	// 動作終了まで繰り返す
+	// 動作終了フレームまで繰り返す
 	for (float animation_time = 0; animation_time < motion.GetDuration(); animation_time += motion.interval)
 	{
 		// 計算用変数
@@ -675,38 +675,124 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, float mo
 		// 末端部位の移動距離の合計を格納
 		d.distanceadd=total_dist;
 
-		// 動作が動いているかどうかを格納
-		// 0のときは止まっている
-		d.movecheck = 0;
-		if (total_dist > move_amount)
-			d.movecheck = 1;
+		// 動作が動いているかどうかの初期化
+		d.movecheck = 1;
 
-		// 動作が開始したかどうかを判断
-		if (d.movecheck == 1)
-		{
-			d.move_start = true;
-		}
-		else if(d.movecheck == 0)
-		{
-			d.move_start = false;
+		// 動作が開始したかどうかの判断の初期化
+		d.move_start = true;
 
-			if (param.size() != 0)
-			{
-				if(param[param.size() - 1].move_start)
-				d.move_start = true;
-			}
-		}
+		// 動作が動いているかどうかの閾値の初期化
+		d.move_amount = 10000;
 
 		// 現フレームの情報を格納する
 		param.push_back(d);
 	}
-	// movecheckの外れ値対策
-	// 前後のmovecheckが一致しているならそれに合わせる
-	// movestartには影響しない……よね？
-	for (int i = 1; i < param.size() - 1; i++)
+
+	// 平滑化(前後10フレーム)
+	for (int i = 10; i < param.size() - 10; i++)
 	{
-		if (param[i - 1].movecheck == param[i + 1].movecheck)
-			param[i].movecheck = param[i - 1].movecheck;
+		for(int j=-10; j<11; j++)
+			param[i].distanceadd += param[i-j].distanceadd;
+		param[i].distanceadd = param[i].distanceadd / 21;
+	}
+
+	// distanceaddのフレーム間の差分（＝微分）
+	vector<float> distanceadd_diff;
+	for(int i = 1; i < param.size(); i++)
+		distanceadd_diff.push_back(param[i].distanceadd - param[i-1].distanceadd);
+
+	// 極大値、極小値を取るときのフレーム番号
+	vector<int> distance_ex_plus;
+	vector<int> distance_ex_minus;
+
+	for (int i = 5; i < distanceadd_diff.size()-5; i++)
+	{
+		// 極大値を探す
+		if (distanceadd_diff[i] < 0 && distanceadd_diff[i - 1] > 0)
+		{
+			// 前後3フレームの微分の正負が一致しないと極値と認めない
+			// 正負が一致しているかどうかを確認するフラグ(一致しなかったらtrue)
+			bool distanceadd_diff_check = false;
+			for (int j = 1; j < 3; j++)
+			{
+				if(distanceadd_diff[i-j] < 0)
+					distanceadd_diff_check = true;
+				if(distanceadd_diff[i+j] > 0)
+					distanceadd_diff_check = true;
+			}
+			if(distanceadd_diff_check == false)
+				distance_ex_plus.push_back(i);
+		}
+
+		// 極小値を探す
+		if (distanceadd_diff[i] > 0 && distanceadd_diff[i - 1] < 0)
+		{
+			// 前後3フレームの微分の正負が一致しないと極値と認めない
+			// 正負が一致しているかどうかを確認するフラグ(一致しなかったらtrue)
+			bool distanceadd_diff_check = false;
+
+			for (int j = 1; j < 3; j++)
+			{
+				if (distanceadd_diff[i - j] > 0)
+					distanceadd_diff_check = true;
+				if (distanceadd_diff[i + j] < 0)
+					distanceadd_diff_check = true;
+			}
+
+			if (distanceadd_diff_check == false)
+				distance_ex_minus.push_back(i);
+		}
+	}
+
+		// 極小値・極大値の個数を少ない方に合わせる(オーバーフロー防止)
+		int distance_ex_size;
+		if(distance_ex_plus.size() >= distance_ex_minus.size())
+			distance_ex_size = distance_ex_minus.size();
+		else
+			distance_ex_size = distance_ex_plus.size();
+
+		// 閾値の設定に用いる極大値・極小値を定める
+		for (int i = 0; i < distanceadd_diff.size(); i++)
+		{
+			for (int j = 0; j < distance_ex_size-1; j++)
+			{
+				if (i < distance_ex_plus[j])
+				{
+					if (distanceadd_diff[i] < 0)
+					{
+						// 閾値の設定
+						param[i].move_amount = 
+							distanceadd_diff[distance_ex_plus[j-1]] + (distanceadd_diff[distance_ex_plus[j-1]] - distanceadd_diff[distance_ex_minus[j-1]]) / 5;
+					}
+					else
+					{
+						// 閾値の設定
+						param[i].move_amount =
+							distanceadd_diff[distance_ex_plus[j]] + (distanceadd_diff[distance_ex_plus[j]] - distanceadd_diff[distance_ex_minus[j-1]]) / 5;
+					}
+				}
+			}
+		}
+
+	for (int i = 0; i < param.size(); i++)
+	{
+		//movecheckの設定
+		if(param[i].distanceadd < param[i].move_amount)
+			param[i].movecheck = 0;
+		else
+			param[i].movecheck = 1;
+
+		// movestartの設定
+		if(param[i].movecheck == 1)
+			param[i].move_start = true;
+		else
+		{
+			param[i].move_start = false;
+			if(i > 0){
+				if(param[i-1].move_start)
+					param[i].move_start = true;
+			}
+		}
 	}
 }
 
