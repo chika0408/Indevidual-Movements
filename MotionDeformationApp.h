@@ -103,9 +103,6 @@ class  MotionDeformationApp : public InverseKinematicsCCDApp
 	// 動作変形(タイムワーピング)情報
 	TimeWarpingParam timewarp_deformation;
 
-	// 動作が動いているかどうかの閾値
-	float		move_amount;
-
 	// タイムワーピング実行後の前フレームの時間
 	float    before_frame_time;
 
@@ -223,7 +220,7 @@ class  MotionDeformationApp : public InverseKinematicsCCDApp
 void InitDistanceParameter(vector<DistanceParam> & param);
 
 // 末端部位の移動距離を測定
-void CheckDistance(const Motion& motion, vector<DistanceParam> & param, float move_amount, const char ** segment_names = NULL);
+void CheckDistance(const Motion& motion, vector<DistanceParam> & param, const char ** segment_names = NULL);
 
 // 応急処置
 int Getseg(int i);
