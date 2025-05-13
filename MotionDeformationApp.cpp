@@ -42,7 +42,6 @@ MotionDeformationApp::MotionDeformationApp() : InverseKinematicsCCDApp()
 	animation_speed = 1.0f;
 	frame_no = 0;
 	before_frame_time = 0.0f;
-	move_amount = 0.05f;
 
 	second_motion = NULL;
 	second_curr_posture = NULL;
@@ -107,21 +106,21 @@ void  MotionDeformationApp::Initialize()
 	primary_segment_names[SEG_HEAD] = "Neck";
 
 	// 末端部位の移動距離の合計をフレーム毎に配列として出力
-	CheckDistance(*motion, distanceinfo, move_amount, primary_segment_names);
+	CheckDistance(*motion, distanceinfo, primary_segment_names);
 
 	// 確認のためにdistanceinfoをcsvファイルに書き出す
 	std::ofstream outputfile("distanceinfo_output.csv");
 	for (auto&& b : distanceinfo) {
 		outputfile << b.distanceadd;
 		outputfile << ',';
-		outputfile << b.movecheck;
+		outputfile << b.move_amount;
 		outputfile << '\n';
 	}
 	outputfile.close();
 
 	// フリレベル・キレレベルの設定
-	furi = 15.0f;
-	kire = 10.0f;
+	furi = 5.0f;
+	kire = 5.0f;
 
 	// 動作変形情報の初期化
 	InitParameter();
@@ -432,7 +431,7 @@ void  MotionDeformationApp::InitMotion( int no )
 		//LoadBVH("radio_middle_8_Char00.bvh"); //move_amount = 5.45
 
 		LoadSecondBVH("steplong_Char00.bvh");
-		//LoadSecondBVH("radio_long_3_Char00.bvh");
+		//LoadSecondBVH("radio_long_1_Char00.bvh");
 		if ( !motion )
 			return;
 	}
@@ -602,7 +601,7 @@ void InitDistanceParameter(vector<DistanceParam> & param)
 //
 // 末端部位の移動距離を測定
 //
-void CheckDistance(const Motion& motion, vector<DistanceParam> & param, float move_amount, const char ** segment_names)
+void CheckDistance(const Motion& motion, vector<DistanceParam> & param, const char ** segment_names)
 {
 	// 骨格の追加情報を生成
 	// キャラクタの骨格情報
@@ -618,7 +617,7 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, float mo
 	Point3f before_segment_positions[NUM_PRIMARY_SEGMENTS] ; // 前フレームの主要体節の位置
 
 	// 末端部位の位置を取得
-	// 動作終了まで繰り返す
+	// 動作終了フレームまで繰り返す
 	for (float animation_time = 0; animation_time < motion.GetDuration(); animation_time += motion.interval)
 	{
 		// 計算用変数
@@ -675,38 +674,149 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, float mo
 		// 末端部位の移動距離の合計を格納
 		d.distanceadd=total_dist;
 
-		// 動作が動いているかどうかを格納
-		// 0のときは止まっている
-		d.movecheck = 0;
-		if (total_dist > move_amount)
-			d.movecheck = 1;
+		// 動作が動いているかどうかの初期化
+		d.movecheck = 1;
 
-		// 動作が開始したかどうかを判断
-		if (d.movecheck == 1)
-		{
-			d.move_start = true;
-		}
-		else if(d.movecheck == 0)
-		{
-			d.move_start = false;
+		// 動作が開始したかどうかの判断の初期化
+		d.move_start = true;
 
-			if (param.size() != 0)
-			{
-				if(param[param.size() - 1].move_start)
-				d.move_start = true;
-			}
-		}
+		// 動作が動いているかどうかの閾値の初期化
+		d.move_amount = 10000;
 
 		// 現フレームの情報を格納する
 		param.push_back(d);
 	}
-	// movecheckの外れ値対策
-	// 前後のmovecheckが一致しているならそれに合わせる
-	// movestartには影響しない……よね？
-	for (int i = 1; i < param.size() - 1; i++)
+
+	// 平滑化(前後10フレーム)
+	for (int i = 10; i < param.size() - 10; i++)
 	{
-		if (param[i - 1].movecheck == param[i + 1].movecheck)
-			param[i].movecheck = param[i - 1].movecheck;
+		for(int j=-10; j<11; j++)
+			param[i].distanceadd += param[i-j].distanceadd;
+		param[i].distanceadd = param[i].distanceadd / 21;
+	}
+
+	// distanceaddのフレーム間の差分（＝微分）
+	vector<float> distanceadd_diff;
+	for(int i = 1; i < param.size(); i++)
+		distanceadd_diff.push_back(param[i].distanceadd - param[i-1].distanceadd);
+
+	// 極大値、極小値を取るときのフレーム番号
+	vector<int> distance_ex_plus;
+	vector<int> distance_ex_minus;
+
+	for (int i = 5; i < distanceadd_diff.size()-5; i++)
+	{
+		// 極大値を探す
+		if (distanceadd_diff[i] < 0 && distanceadd_diff[i - 1] > 0)
+		{
+			// 前後2フレームの微分の正負が一致しないと極値と認めない
+			// 正負が一致しているかどうかを確認するフラグ(一致しなかったらtrue)
+			bool distanceadd_diff_check = false;
+			
+			for (int j = 1; j < 3; j++)
+			{
+				if(distanceadd_diff[i-j] < 0)
+					distanceadd_diff_check = true;
+				if(distanceadd_diff[i+j] > 0)
+					distanceadd_diff_check = true;
+			}
+			
+			if(distanceadd_diff_check == false)
+				distance_ex_plus.push_back(i);
+		}
+
+		// 極小値を探す
+		if (distanceadd_diff[i] > 0 && distanceadd_diff[i - 1] < 0)
+		{
+			// 前後2フレームの微分の正負が一致しないと極値と認めない
+			// 正負が一致しているかどうかを確認するフラグ(一致しなかったらtrue)
+			bool distanceadd_diff_check = false;
+			
+			for (int j = 1; j < 3; j++)
+			{
+				if (distanceadd_diff[i - j] > 0)
+					distanceadd_diff_check = true;
+				if (distanceadd_diff[i + j] < 0)
+					distanceadd_diff_check = true;
+			}
+			
+			if (distanceadd_diff_check == false)
+				distance_ex_minus.push_back(i);
+		}
+	}
+
+		// 極小値・極大値の個数を少ない方に合わせる(オーバーフロー防止)
+		int distance_ex_size;
+		if(distance_ex_plus.size() >= distance_ex_minus.size())
+			distance_ex_size = distance_ex_minus.size();
+		else
+			distance_ex_size = distance_ex_plus.size();
+
+		// 閾値の設定に用いる極大値・極小値を定める
+		// iは定めるフレーム
+		for (int i = 0; i < distanceadd_diff.size(); i++)
+		{
+			int j, l;
+			// jは極大値検索用
+			for (j = 1; j < distance_ex_plus.size()-1; j++) 
+			{
+				if (i < distance_ex_plus[j])
+				{
+					if (fabs(i - distance_ex_plus[j]) > fabs(i - distance_ex_plus[j - 1]))
+					{
+						j = j - 1;
+					}
+					if (distance_ex_plus.size() < j)
+						j = distance_ex_plus.size() - 1;
+					break;
+				}
+			}
+			// lは極小値検索用
+			for (l = 1; l < distance_ex_minus.size()-1; l++)
+			{
+				if (i < distance_ex_minus[l])
+				{
+					if (fabs(i - distance_ex_minus[l]) > fabs(i - distance_ex_minus[l - 1]))
+					{
+						l = l - 1;
+					}
+					if(distance_ex_minus.size() < l)
+						l = distance_ex_minus.size() - 1;
+					break;
+				}
+			}
+
+			if (distanceadd_diff[i] < 0)
+			{
+				param[i].move_amount =
+					param[distance_ex_minus[l]].distanceadd + (param[distance_ex_plus[j]].distanceadd - param[distance_ex_minus[l]].distanceadd) / 5;
+			}
+			else
+			{
+				param[i].move_amount =
+					param[distance_ex_plus[j]].distanceadd + (param[distance_ex_plus[j]].distanceadd - param[distance_ex_minus[l]].distanceadd) / 5;
+			}
+		}
+
+	for (int i = 0; i < param.size(); i++)
+	{
+		// movecheckの設定
+		if(param[i].distanceadd < param[i].move_amount)
+			param[i].movecheck = 0;
+		else
+			param[i].movecheck = 1;
+
+		// movestartの設定
+		if(param[i].movecheck == 1)
+			param[i].move_start = true;
+		else
+		{
+			param[i].move_start = false;
+			if(i > 0){
+				if(param[i-1].move_start)
+					param[i].move_start = true;
+			}
+		}
 	}
 }
 
