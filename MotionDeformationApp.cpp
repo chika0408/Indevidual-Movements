@@ -840,6 +840,14 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, const ch
 			param[i].move_amount = param[i].move_amount / 11;
 		}
 
+		// 閾値を平滑化する
+		for (int i = 5; i < param.size() - 5; i++)
+		{
+			for (int j = -5; j < 6; j++)
+				param[i].move_amount += param[i - j].move_amount;
+			param[i].move_amount = param[i].move_amount / 21;
+		}
+
 	for (int i = 0; i < param.size(); i++)
 	{
 		// movecheckの設定
