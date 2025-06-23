@@ -24,7 +24,7 @@
 // 標準算術関数・定数の定義
 #define  _USE_MATH_DEFINES
 #include <math.h>
-
+#include <random>
 
 //
 //  コンストラクタ
@@ -119,8 +119,8 @@ void  MotionDeformationApp::Initialize()
 	outputfile.close();
 
 	// フリレベル・キレレベルの設定
-	furi = 5.0f;
-	kire = 5.0f;
+	furi = -8.0f;
+	kire = -5.0f;
 
 	// 動作変形情報の初期化
 	InitParameter();
@@ -422,11 +422,12 @@ void  MotionDeformationApp::InitMotion( int no )
 	if ( no == 0 )
 	{
 		// サンプルBVH動作データを読み込み
-		//LoadBVH( "stepshort_new_Char00.bvh" ); //move_amount = 2.79 or 3.1
-		LoadBVH("radio_middle_3_Char00.bvh"); //move_amount = 5.45
+		LoadBVH( "stepshort_new_Char00.bvh" ); //move_amount = 2.79 or 3.1
+		//LoadBVH("radio_middle_3_Char00.bvh"); //move_amount = 5.45
 
-		//LoadSecondBVH("steplong_Char00.bvh");
-		LoadSecondBVH("radio_long_3_Char00.bvh");
+
+		LoadSecondBVH("steplong_Char00.bvh");
+		//LoadSecondBVH("radio_long_3_Char00.bvh");
 		if ( !motion )
 			return;
 	}
@@ -713,7 +714,7 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, const ch
 			bool distanceadd_diff_check = false;
 			
 			// 前後3フレームの微分の正負が一致しないと極値と認めない
-			for (int j = 1; j < 4; j++)
+			for (int j = 1; j < 3; j++)
 			{
 				if(distanceadd_diff[i-j] < 0)
 					distanceadd_diff_check = true;
@@ -744,7 +745,7 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, const ch
 			bool distanceadd_diff_check = false;
 			
 			// 前後3フレームの微分の正負が一致しないと極値と認めない
-			for (int j = 1; j < 4; j++)
+			for (int j = 1; j < 3; j++)
 			{
 				if (distanceadd_diff[i - j] > 0)
 					distanceadd_diff_check = true;
@@ -838,14 +839,6 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, const ch
 				param[i].move_amount += param[i - j].move_amount;
 			}
 			param[i].move_amount = param[i].move_amount / 11;
-		}
-
-		// 閾値を平滑化する
-		for (int i = 5; i < param.size() - 5; i++)
-		{
-			for (int j = -5; j < 6; j++)
-				param[i].move_amount += param[i - j].move_amount;
-			param[i].move_amount = param[i].move_amount / 21;
 		}
 
 	for (int i = 0; i < param.size(); i++)
@@ -1418,16 +1411,34 @@ void  InitDeformationParameter(
 			Vector3f move_vec;
 			move_vec = segment_positions[i] - before_segment_positions[i];
 
+			//// 軸足でない場合ノイズを付与
+			//if (i == 0 || i == 1)
+			//{
+			//	if (segment_positions[i].z > -0.2f)
+			//	{
+			//		// ノイズの座標
+			//		Point3f foot_noize;
+			//		float noize[3];
+
+			//		// 乱数を生成
+			//		std::random_device rd;
+			//		std::mt19937 gen(rd());
+			//		std::uniform_real_distribution<float> dist(-0.00001f, 0.00001f);
+
+			//		for (int i = 0; i < 3; i++) 
+			//		{
+			//			noize[i] = dist(gen);
+			//		}
+
+			//		foot_noize.x = noize[0];
+			//		foot_noize.y = noize[1];
+			//		foot_noize.z = noize[2];
+			//		move_vec += foot_noize;
+			//	}
+			//}
+
 			// フリレベルを倍率として移動距離を設定
 			move_vec = move_vec * furi;
-
-			// 頭だけ移動距離を伸ばす
-			/*
-			if (i == 6)
-			{
-				move_vec = move_vec * 1.5;
-			}
-			*/
 
 			Point3f ee_pos;
 			ee_pos = segment_positions[i];
