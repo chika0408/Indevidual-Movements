@@ -107,7 +107,7 @@ class  MotionDeformationApp : public InverseKinematicsCCDApp
 	float    before_frame_time;
 
 	// フリレベル
-	float		furi;
+	float		furi[7];
 
 	// キレレベル
 	float		kire;
@@ -260,7 +260,7 @@ void  InitDeformationParameter( const Motion & motion, float key_time, float ble
 
 // 動作変形（動作ワーピング）の情報の初期化・更新
 void  InitDeformationParameter(
-	float now_time, vector<DistanceParam> distance, MotionWarpingParam& param, TimeWarpingParam time_param, Motion& motion, float furi);
+	float now_time, vector<DistanceParam> distance, MotionWarpingParam& param, TimeWarpingParam time_param, Motion& motion, float furi[]);
 
 // 動作変形（動作ワーピング）の適用後の動作を生成
 Motion *  GenerateDeformedMotion( const MotionWarpingParam & deform, const Motion & motion );

@@ -119,7 +119,13 @@ void  MotionDeformationApp::Initialize()
 	outputfile.close();
 
 	// フリレベル・キレレベルの設定
-	furi = -8.0f;
+	furi[0] = 8.0f;
+	furi[1] = 8.0f;
+	furi[2] = 8.0f;
+	furi[3] = 8.0f;
+	furi[4] = 8.0f;
+	furi[5] = 8.0f;
+	furi[6] = 8.0f;
 	kire = -5.0f;
 
 	// 動作変形情報の初期化
@@ -1190,7 +1196,7 @@ void  InitDeformationParameter(
 //  動作変形（動作ワーピング）の情報の初期化・更新
 //
 void  InitDeformationParameter(
-	float now_time, vector<DistanceParam> distance, MotionWarpingParam& param, TimeWarpingParam time_param, Motion& motion, float furi)
+	float now_time, vector<DistanceParam> distance, MotionWarpingParam& param, TimeWarpingParam time_param, Motion& motion, float furi[])
 {
 	// 現在時刻のフレーム
 	int now_frame = 0.00;
@@ -1406,39 +1412,39 @@ void  InitDeformationParameter(
 				before_seg_frame_array[seg_no].get(&before_vec);
 				before_segment_positions[i] = before_vec;
 			}
-
+			 
 			// 末端部位の位置から末端部位の移動の向きを計算
 			Vector3f move_vec;
 			move_vec = segment_positions[i] - before_segment_positions[i];
 
 			//// 軸足でない場合ノイズを付与
-			//if (i == 0 || i == 1)
-			//{
-			//	if (segment_positions[i].z > -0.2f)
-			//	{
-			//		// ノイズの座標
-			//		Point3f foot_noize;
-			//		float noize[3];
+			if (i == 0 || i == 1)
+			{
+				if (segment_positions[i].z > -2.0f)
+				{
+					// ノイズの座標
+					Point3f foot_noize;
+					float noize[3];
 
-			//		// 乱数を生成
-			//		std::random_device rd;
-			//		std::mt19937 gen(rd());
-			//		std::uniform_real_distribution<float> dist(-0.00001f, 0.00001f);
+					// 乱数を生成
+					std::random_device rd;
+					std::mt19937 gen(rd());
+					std::uniform_real_distribution<float> dist(-0.001f, 0.001f);
 
-			//		for (int i = 0; i < 3; i++) 
-			//		{
-			//			noize[i] = dist(gen);
-			//		}
+					for (int i = 0; i < 3; i++) 
+					{
+						noize[i] = dist(gen);
+					}
 
-			//		foot_noize.x = noize[0];
-			//		foot_noize.y = noize[1];
-			//		foot_noize.z = noize[2];
-			//		move_vec += foot_noize;
-			//	}
-			//}
+					foot_noize.x = noize[0];
+					foot_noize.y = noize[1];
+					foot_noize.z = noize[2];
+					move_vec += foot_noize;
+				}
+			}
 
 			// フリレベルを倍率として移動距離を設定
-			move_vec = move_vec * furi;
+			move_vec = move_vec * furi[i];
 
 			Point3f ee_pos;
 			ee_pos = segment_positions[i];
