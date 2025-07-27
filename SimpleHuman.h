@@ -15,6 +15,7 @@
 //
 #include <Vector3.h>
 #include <Point3.h>
+#include <Point2.h>
 #include <Matrix3.h>
 #include <Matrix4.h>
 #include <Color3.h>

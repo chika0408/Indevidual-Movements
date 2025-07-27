@@ -428,12 +428,12 @@ void  MotionDeformationApp::InitMotion( int no )
 	if ( no == 0 )
 	{
 		// サンプルBVH動作データを読み込み
-		LoadBVH( "stepshort_new_Char00.bvh" ); //move_amount = 2.79 or 3.1
-		//LoadBVH("radio_middle_3_Char00.bvh"); //move_amount = 5.45
+		//LoadBVH( "stepshort_new_Char00.bvh" ); //move_amount = 2.79 or 3.1
+		LoadBVH("radio_middle_3_Char00.bvh"); //move_amount = 5.45
 
 
-		LoadSecondBVH("steplong_Char00.bvh");
-		//LoadSecondBVH("radio_long_3_Char00.bvh");
+		//LoadSecondBVH("steplong_Char00.bvh");
+		LoadSecondBVH("radio_long_3_Char00.bvh");
 		if ( !motion )
 			return;
 	}
@@ -720,7 +720,7 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, const ch
 			bool distanceadd_diff_check = false;
 			
 			// 前後3フレームの微分の正負が一致しないと極値と認めない
-			for (int j = 1; j < 3; j++)
+			for (int j = 1; j < 4; j++)
 			{
 				if(distanceadd_diff[i-j] < 0)
 					distanceadd_diff_check = true;
@@ -751,7 +751,7 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, const ch
 			bool distanceadd_diff_check = false;
 			
 			// 前後3フレームの微分の正負が一致しないと極値と認めない
-			for (int j = 1; j < 3; j++)
+			for (int j = 1; j < 4; j++)
 			{
 				if (distanceadd_diff[i - j] > 0)
 					distanceadd_diff_check = true;
@@ -815,25 +815,9 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, const ch
 						l = distance_ex_minus.size() - 1;
 					break;
 				}
-			}
-
-			/*
-			if (distanceadd_diff[i] < 0)
-			{
-				param[i].move_amount =
-					param[distance_ex_minus[l]].distanceadd + (param[distance_ex_plus[j]].distanceadd - param[distance_ex_minus[l]].distanceadd) / 5;
-			}
-			else
-			{
-				param[i].move_amount =
-					param[distance_ex_plus[j]].distanceadd + (param[distance_ex_plus[j]].distanceadd - param[distance_ex_minus[l]].distanceadd) / 5;
-			}
-			*/
-			
+			}			
 			param[i].move_amount =
 				param[distance_ex_minus[l]].distanceadd + (param[distance_ex_plus[j]].distanceadd - param[distance_ex_minus[l]].distanceadd) / 5;
-			
-
 		}
 
 		// 閾値を平滑化する
@@ -1116,37 +1100,100 @@ void ApplyTimeWarping(float now_time, TimeWarpingParam& deform, const Motion& in
 float Warping(float now_time, TimeWarpingParam& deform)
 {
 	// 現在時刻の正規化時刻を計算する
-	float now_native_time = (now_time - deform.warp_in_duration_time) / (deform.warp_out_duration_time - deform.warp_in_duration_time);
+	//float now_native_time = (now_time - deform.warp_in_duration_time) / (deform.warp_out_duration_time - deform.warp_in_duration_time);
 
 	// タイムワーピング前後のキー時刻の正規化時刻を計算する
+	if (deform.warp_key_time == deform.after_key_time)
+		deform.warp_key_time -= 0.033f; //intervalの値
+
 	float before_key_native_time = (deform.warp_key_time - deform.warp_in_duration_time) / (deform.warp_out_duration_time - deform.warp_in_duration_time);
 	float after_key_native_time = (deform.after_key_time - deform.warp_in_duration_time) / (deform.warp_out_duration_time - deform.warp_in_duration_time);
 
 	float warping_native_time; // タイムワーピング実行後の正規化時刻
 
-	if (now_native_time <= before_key_native_time)
+	float in_time, out_time; // ベジェ曲線の開始時刻・終了時刻
+
+	// ベジェ曲線の区間決定
+	if (now_time <= deform.warp_key_time)
 	{
-		// タイムワーピング開始時からタイムワーピング前のキー時刻までの区間の現在時刻の正規化時刻を計算
-		float now_key_native_time = (now_time - deform.warp_in_duration_time) / (deform.warp_key_time - deform.warp_in_duration_time);
-
-		warping_native_time = now_native_time * (after_key_native_time / before_key_native_time);
-
+		in_time = deform.warp_in_duration_time;
+		out_time = deform.warp_key_time;
 	}
 	else
 	{
-		// タイムワーピング前のキー時刻からタイムワーピング終了時の区間の現在時刻の正規化時刻を計算
-		float now_key_native_time = (now_time - deform.warp_key_time) / (deform.warp_out_duration_time - deform.warp_key_time);
-
-		warping_native_time =
-			after_key_native_time +
-			(1 - after_key_native_time) * ((now_native_time - before_key_native_time) / (1 - before_key_native_time));
+		in_time = deform.warp_key_time;
+		out_time = deform.warp_out_duration_time;
 	}
 
+	// 現在時刻の正規化時刻を計算
+	float now_native_time = (now_time - in_time) / (out_time - in_time);
+
+	// ベジェ曲線の開始点・終了点の設定
+	Point2f in, out;
+	in.x = 0.0f; in.y = 0.0f;
+	out.x = 1.0f; out.y = 1.0f;
+
+	// ベジェ曲線の制御点
+	Point2f half1,half2;
+
+	// 制御点の座標を求める
+	half1.x = 0.01f;
+	half2.x = 0.99f;
+
+	half1.y = 0.0f;
+	half2.y = 1.0f;
+
+	// ベジェ曲線のパラメータtを求める(二分探索による近似値)
+	float lower = 0.0f;
+	float upper = 1.0f;
+	float tolerance = 0.000001;
+	float t = now_native_time; // 初期値
+
+	for (int i = 0; i < 10; ++i)
+	{
+		Point2f point_at_t;
+		CalcBezier(in, out, half1, half2, t, point_at_t);
+		float x_at_t = point_at_t.x;
+
+		if (std::abs(x_at_t - now_native_time) < tolerance)
+			break;
+
+		if(x_at_t < now_native_time)
+		{
+			lower = t;
+		}
+		else 
+		{
+			upper = t;
+		}
+		t = (upper + lower) / 2.0f;
+	}
+
+	// 結果保存用変数
+	Point2f result;
+	CalcBezier(in, out, half1, half2, t, result);
+
+	warping_native_time = result.y;
+
 	// タイムワーピング実行後の時刻を計算して返す	
-	float warping_time = deform.warp_in_duration_time + (deform.warp_out_duration_time - deform.warp_in_duration_time) * warping_native_time;
+	float warping_time = in_time + (out_time - in_time) * warping_native_time;
 	return warping_time;
 }
 
+//
+//  ベジェ曲線上の点を計算
+//
+void CalcBezier(Point2f in, Point2f out, Point2f half1, Point2f half2, float t, Point2f& result)
+{
+	float u = 1.0 - t;
+	float tt = t * t;
+	float uu = u * u;
+	float uuu = uu * u;
+	float ttt = tt * t;
+
+	result.x = uuu * in.x + 3 * uu * t * half1.x * 3 * u * tt * half2.x + ttt * out.x;
+	result.y = uuu * in.y + 3 * uu * t * half1.y * 3 * u * tt * half2.y + ttt * out.y;
+}
 
 //
 //  動作変形情報にもとづく動作変形処理（モーションワーピング）

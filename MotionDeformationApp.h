@@ -82,7 +82,6 @@ struct  MotionWarpingParam
 	float        blend_out_duration;
 };
 
-
 //
 //  動作変形アプリケーションクラス
 //
@@ -244,6 +243,8 @@ void ApplyTimeWarping(float now_time, TimeWarpingParam& deform, const Motion& in
 // タイムワーピング実行後の時刻を取得
 float Warping(float now_time, TimeWarpingParam& deform);
 
+//  ベジェ曲線上の点を計算
+void CalcBezier(Point2f in, Point2f out, Point2f half1, Point2f half2, float t, Point2f& result);
 
 //
 //  動作変形情報にもとづく動作変形処理（モーションワーピング）
