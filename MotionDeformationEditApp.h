@@ -58,6 +58,9 @@ class  MotionDeformationEditApp : public  MotionDeformationApp
 	//  画面描画
 	virtual void  Display();
 
+	//  グラフ描画
+	virtual void  DrawGraph();
+
 	// マウスクリック
 	virtual void  MouseClick( int button, int state, int mx, int my );
 

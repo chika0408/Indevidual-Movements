@@ -1114,14 +1114,14 @@ float Warping(float now_time, TimeWarpingParam& deform)
 	float in_time, out_time; // ベジェ曲線の開始時刻・終了時刻
 
 	// ベジェ曲線の区間決定
-	if (now_time <= deform.warp_key_time)
+	if (now_time <= deform.after_key_time)
 	{
 		in_time = deform.warp_in_duration_time;
-		out_time = deform.warp_key_time;
+		out_time = deform.after_key_time;
 	}
 	else
 	{
-		in_time = deform.warp_key_time;
+		in_time = deform.after_key_time;
 		out_time = deform.warp_out_duration_time;
 	}
 
@@ -1137,8 +1137,8 @@ float Warping(float now_time, TimeWarpingParam& deform)
 	Point2f half1,half2;
 
 	// 制御点の座標を求める
-	half1.x = 0.01f;
-	half2.x = 0.99f;
+	half1.x = 0.2f;
+	half2.x = 0.8f;
 
 	half1.y = 0.0f;
 	half2.y = 1.0f;
@@ -1177,6 +1177,14 @@ float Warping(float now_time, TimeWarpingParam& deform)
 
 	// タイムワーピング実行後の時刻を計算して返す	
 	float warping_time = in_time + (out_time - in_time) * warping_native_time;
+
+	//std::ofstream outputfile("warpingtime_output.csv", std::ios::app);
+	//outputfile << warping_time;
+	//outputfile << ',';
+	//outputfile << warping_native_time;
+	//outputfile << '\n';
+	//outputfile.close();
+
 	return warping_time;
 }
 
@@ -1191,8 +1199,8 @@ void CalcBezier(Point2f in, Point2f out, Point2f half1, Point2f half2, float t, 
 	float uuu = uu * u;
 	float ttt = tt * t;
 
-	result.x = uuu * in.x + 3 * uu * t * half1.x * 3 * u * tt * half2.x + ttt * out.x;
-	result.y = uuu * in.y + 3 * uu * t * half1.y * 3 * u * tt * half2.y + ttt * out.y;
+	result.x = uuu * in.x + 3 * uu * t * half1.x + 3 * u * tt * half2.x + ttt * out.x;
+	result.y = uuu * in.y + 3 * uu * t * half1.y + 3 * u * tt * half2.y + ttt * out.y;
 }
 
 //
@@ -1465,30 +1473,30 @@ void  InitDeformationParameter(
 			move_vec = segment_positions[i] - before_segment_positions[i];
 
 			//// 軸足でない場合ノイズを付与
-			if (i == 0 || i == 1)
-			{
-				if (segment_positions[i].z > -2.0f)
-				{
-					// ノイズの座標
-					Point3f foot_noize;
-					float noize[3];
+			//if (i == 0 || i == 1)
+			//{
+			//	if (segment_positions[i].z > -2.0f)
+			//	{
+			//		// ノイズの座標
+			//		Point3f foot_noize;
+			//		float noize[3];
 
-					// 乱数を生成
-					std::random_device rd;
-					std::mt19937 gen(rd());
-					std::uniform_real_distribution<float> dist(-0.001f, 0.001f);
+			//		// 乱数を生成
+			//		std::random_device rd;
+			//		std::mt19937 gen(rd());
+			//		std::uniform_real_distribution<float> dist(-0.001f, 0.001f);
 
-					for (int i = 0; i < 3; i++) 
-					{
-						noize[i] = dist(gen);
-					}
+			//		for (int i = 0; i < 3; i++) 
+			//		{
+			//			noize[i] = dist(gen);
+			//		}
 
-					foot_noize.x = noize[0];
-					foot_noize.y = noize[1];
-					foot_noize.z = noize[2];
-					move_vec += foot_noize;
-				}
-			}
+			//		foot_noize.x = noize[0];
+			//		foot_noize.y = noize[1];
+			//		foot_noize.z = noize[2];
+			//		move_vec += foot_noize;
+			//	}
+			//}
 
 			// フリレベルを倍率として移動距離を設定
 			move_vec = move_vec * furi[i];

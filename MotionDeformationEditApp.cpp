@@ -225,8 +225,89 @@ void  MotionDeformationEditApp::Display()
 	sprintf(message, "animation_speed = %.1f", animation_speed);
 	DrawTextInformation( 3, message);
 
-	sprintf(message, "weight = %.2f", weight);
-	DrawTextInformation(4, message);
+	//DrawGraph();
+}
+
+//
+//	グラフの描画
+//
+void  MotionDeformationEditApp::DrawGraph()
+{
+	//// 現在のビューポートを保存
+	//glPushAttrib(GL_VIEWPORT_BIT | GL_SCISSOR_BIT);
+
+	//// ウィンドウの縦幅、横幅を取得
+	//int w;
+	//w = GetWindowWidth();
+	//int h;
+	//h = GetWindowHeight();
+
+	//// 描画領域を画面右上に設定
+	//int graphsize;
+	//if (w < h)
+	//	graphsize = w / 3;
+	//else
+	//	graphsize = h / 3;
+	//glViewport(w - graphsize, h - graphsize, graphsize, graphsize);
+
+	//// シザーテストを有効にする
+	//glEnable(GL_SCISSOR_TEST);
+	//// クリアする領域をビューポートと同じに設定
+	//glScissor(w - graphsize, h - graphsize, graphsize, graphsize);
+
+	//// グラフ描画領域の背景を半透明のグレーでクリア
+	//glEnable(GL_BLEND);
+	//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	//glClearColor(0.2f, 0.2f, 0.2f, 0.9f); // アルファ値(透明度)を 0.5 に設定
+	//glClear(GL_COLOR_BUFFER_BIT);
+	//glDisable(GL_BLEND);
+
+	//// シザーテストを無効に戻す
+	//glDisable(GL_SCISSOR_TEST);
+
+	//// グラフ描画のための座標系を設定
+	//glMatrixMode(GL_PROJECTION);
+	//glLoadIdentity();
+	//gluOrtho2D(0.0, 1.0, 0.0, 1.0);
+
+	//glMatrixMode(GL_MODELVIEW);
+	//glLoadIdentity();
+
+	//// グラフの描画 (黄色)
+	//glColor3f(1.0f, 1.0f, 0.0f);
+	//glBegin(GL_LINE_STRIP);
+	//Motion copy_motion = *motion;
+	//TimeWarpingParam copy_timeparam;
+
+	//for (float t = 0.0f; t <= copy_motion.GetDuration(); t += motion->interval)
+	//{
+	//	InitTimeDeformationParameter(t, distanceinfo, copy_timeparam, copy_motion, kire);
+	//	if (t > copy_timeparam.warp_in_duration_time && t < copy_timeparam.warp_out_duration_time)
+	//	{
+	//		float in_time, out_time;
+	//		if (t <= copy_timeparam.warp_key_time)
+	//		{
+	//			in_time = copy_timeparam.warp_in_duration_time;
+	//			out_time = copy_timeparam.warp_key_time;
+	//		}
+	//		else
+	//		{
+	//			in_time = copy_timeparam.warp_key_time;
+	//			out_time = copy_timeparam.warp_out_duration_time;
+	//		}
+	//		float copy_warptime = Warping(t, copy_timeparam);
+
+	//			float copy_native_time = (t - in_time) / (out_time - in_time);
+	//			float copy_warp_native_time = (copy_warptime - in_time) / (out_time - in_time);
+
+	//			glVertex2f(copy_native_time,copy_warp_native_time);
+	//	}
+
+	//}
+	//glEnd();
+
+	//// ビューポートを復元
+	//glPopAttrib();
 }
 
 
