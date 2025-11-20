@@ -109,24 +109,24 @@ void  MotionDeformationApp::Initialize()
 	CheckDistance(*motion, distanceinfo, primary_segment_names);
 
 	// 確認のためにdistanceinfoをcsvファイルに書き出す
-	std::ofstream outputfile("distanceinfo_output.csv");
-	for (auto&& b : distanceinfo) {
-		outputfile << b.distanceadd;
-		outputfile << ',';
-		outputfile << b.move_amount;
-		outputfile << '\n';
-	}
-	outputfile.close();
+	//std::ofstream outputfile("distanceinfo_output.csv");
+	//for (auto&& b : distanceinfo) {
+	//	outputfile << b.distanceadd;
+	//	outputfile << ',';
+	//	outputfile << b.move_amount;
+	//	outputfile << '\n';
+	//}
+	//outputfile.close();
 
 	// フリレベル・キレレベルの設定
-	furi[0] = 8.0f;
-	furi[1] = 8.0f;
-	furi[2] = 8.0f;
-	furi[3] = 8.0f;
-	furi[4] = 8.0f;
-	furi[5] = 8.0f;
-	furi[6] = 8.0f;
-	kire = -5.0f;
+	furi[0] = 1.0f;
+	furi[1] = 1.0f;
+	furi[2] = 1.0f;
+	furi[3] = 1.0f;
+	furi[4] = 1.0f;
+	furi[5] = -20.0f;
+	furi[6] = -10.0f;
+	kire = 1.4f;
 
 	// 動作変形情報の初期化
 	InitParameter();
@@ -408,7 +408,7 @@ void  MotionDeformationApp::Animation( float delta )
 	ApplyTimeWarping(animation_time, timewarp_deformation, *motion, before_frame_time, *deformed_posture);
 
 	// 動作変形（動作ワーピング）の適用後の姿勢の計算
-	weight = ApplyMotionDeformation( animation_time, deformation, *motion, *org_posture, timewarp_deformation, *deformed_posture );
+	weight = ApplyMotionDeformation( animation_time, deformation, *motion, *deformed_posture, timewarp_deformation, *deformed_posture );
 
 	// ２つ目の動作の姿勢を取得
  	second_motion->GetPosture(animation_time, *second_curr_posture);
@@ -429,11 +429,12 @@ void  MotionDeformationApp::InitMotion( int no )
 	{
 		// サンプルBVH動作データを読み込み
 		//LoadBVH( "stepshort_new_Char00.bvh" ); //move_amount = 2.79 or 3.1
-		LoadBVH("radio_middle_3_Char00.bvh"); //move_amount = 5.45
-
+		//LoadBVH("radio_middle_3_Char00.bvh"); //move_amount = 5.45
+		LoadBVH("fight_punch.bvh");
 
 		//LoadSecondBVH("steplong_Char00.bvh");
-		LoadSecondBVH("radio_long_3_Char00.bvh");
+		//LoadSecondBVH("radio_long_3_Char00.bvh");
+		LoadSecondBVH("fight_punch_key.bvh");
 		if ( !motion )
 			return;
 	}
@@ -787,35 +788,41 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, const ch
 		// iは定めるフレーム
 		for (int i = 0; i < distanceadd_diff.size(); i++)
 		{
-			int j, l;
+			int j=0, l=0;
 			// jは極大値検索用
-			for (j = 1; j < distance_ex_plus.size()-1; j++) 
+			if (distance_ex_plus.size() > 1)
 			{
-				if (i < distance_ex_plus[j])
+				for (j = 1; j < distance_ex_plus.size() - 1; j++)
 				{
-					if (fabs(i - distance_ex_plus[j]) > fabs(i - distance_ex_plus[j - 1]))
+					if (i < distance_ex_plus[j])
 					{
-						j = j - 1;
+						if (fabs(i - distance_ex_plus[j]) > fabs(i - distance_ex_plus[j - 1]))
+						{
+							j = j - 1;
+						}
+						if (distance_ex_plus.size() < j)
+							j = distance_ex_plus.size() - 1;
+						break;
 					}
-					if (distance_ex_plus.size() < j)
-						j = distance_ex_plus.size() - 1;
-					break;
 				}
 			}
 			// lは極小値検索用
-			for (l = 1; l < distance_ex_minus.size()-1; l++)
+			if (distance_ex_minus.size() > 1)
 			{
-				if (i < distance_ex_minus[l])
+				for (l = 1; l < distance_ex_minus.size() - 1; l++)
 				{
-					if (fabs(i - distance_ex_minus[l]) > fabs(i - distance_ex_minus[l - 1]))
+					if (i < distance_ex_minus[l])
 					{
-						l = l - 1;
+						if (fabs(i - distance_ex_minus[l]) > fabs(i - distance_ex_minus[l - 1]))
+						{
+							l = l - 1;
+						}
+						if (distance_ex_minus.size() < l)
+							l = distance_ex_minus.size() - 1;
+						break;
 					}
-					if(distance_ex_minus.size() < l)
-						l = distance_ex_minus.size() - 1;
-					break;
 				}
-			}			
+			}	
 			param[i].move_amount =
 				param[distance_ex_minus[l]].distanceadd + (param[distance_ex_plus[j]].distanceadd - param[distance_ex_minus[l]].distanceadd) / 5;
 		}
@@ -851,6 +858,7 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, const ch
 			}
 		}
 	}
+	delete human_body;
 }
 
 
@@ -935,7 +943,7 @@ void  InitTimeDeformationParameter(
 			param.warp_in_duration_time = 0.0f;
 
 			// 今の動作の終わりの時間がワーピング終了フレーム
-			for (int i = now_frame; i < distance.size(); i++)
+			for (int i = now_frame; i < distance.size()-1; i++)
 			{
 				if (distance[i].movecheck == 0 && distance[i + 1].movecheck == 1)
 				{
@@ -1014,7 +1022,7 @@ void  InitTimeDeformationParameter(
 			(param.warp_key_time - param.warp_in_duration_time) / (param.warp_out_duration_time - param.warp_in_duration_time);
 
 		// ワーピング後のキー時刻の正規化時間を計算
-		float after_key_native_time = warp_key_native_time * (1 + (kire / 100) );
+		float after_key_native_time = warp_key_native_time * kire;
 		if (after_key_native_time >= 1)
 			after_key_native_time = 1.0f;
 
@@ -1025,10 +1033,10 @@ void  InitTimeDeformationParameter(
 	// 動作が始まっていないときはワーピングを開始しない
 	else if (distance[now_frame].move_start == false)
 	{
-		param.warp_in_duration_time = 1000000;
-		param.warp_out_duration_time = 10000000;
-		param.warp_key_time = 1000000;
-		param.after_key_time = 10000000;
+		param.warp_in_duration_time = -2000.f;
+		param.warp_out_duration_time = -10000.0f;
+		param.warp_key_time = -1000.0;
+		param.after_key_time = -1000.0;
 	}
 }
 
@@ -1090,6 +1098,7 @@ void ApplyTimeWarping(float now_time, TimeWarpingParam& deform, const Motion& in
 	{
 		// 姿勢を生成
 		input_motion.GetPosture(now_time, output_pose);
+		before_frame_time = now_time;
 	}
 }
 
@@ -1099,15 +1108,9 @@ void ApplyTimeWarping(float now_time, TimeWarpingParam& deform, const Motion& in
 
 float Warping(float now_time, TimeWarpingParam& deform)
 {
-	// 現在時刻の正規化時刻を計算する
-	//float now_native_time = (now_time - deform.warp_in_duration_time) / (deform.warp_out_duration_time - deform.warp_in_duration_time);
-
 	// タイムワーピング前後のキー時刻の正規化時刻を計算する
 	if (deform.warp_key_time == deform.after_key_time)
 		deform.warp_key_time -= 0.033f; //intervalの値
-
-	float before_key_native_time = (deform.warp_key_time - deform.warp_in_duration_time) / (deform.warp_out_duration_time - deform.warp_in_duration_time);
-	float after_key_native_time = (deform.after_key_time - deform.warp_in_duration_time) / (deform.warp_out_duration_time - deform.warp_in_duration_time);
 
 	float warping_native_time; // タイムワーピング実行後の正規化時刻
 
@@ -1137,8 +1140,8 @@ float Warping(float now_time, TimeWarpingParam& deform)
 	Point2f half1,half2;
 
 	// 制御点の座標を求める
-	half1.x = 0.2f;
-	half2.x = 0.8f;
+	half1.x = 0.05f;
+	half2.x = 0.95f;
 
 	half1.y = 0.0f;
 	half2.y = 1.0f;
@@ -1175,8 +1178,22 @@ float Warping(float now_time, TimeWarpingParam& deform)
 
 	warping_native_time = result.y;
 
+	float before_in_time, before_out_time; // タイムワーピング実行前の開始時刻・終了時刻
+
+	// ベジェ曲線の区間決定
+	if (now_time <= deform.after_key_time)
+	{
+		before_in_time = deform.warp_in_duration_time;
+		before_out_time = deform.warp_key_time;
+	}
+	else
+	{
+		before_in_time = deform.warp_key_time;
+		before_out_time = deform.warp_out_duration_time;
+	}
+
 	// タイムワーピング実行後の時刻を計算して返す	
-	float warping_time = in_time + (out_time - in_time) * warping_native_time;
+	float warping_time = before_in_time + (before_out_time - before_in_time) * warping_native_time;
 
 	//std::ofstream outputfile("warpingtime_output.csv", std::ios::app);
 	//outputfile << warping_time;
@@ -1330,7 +1347,7 @@ void  InitDeformationParameter(
 			param.blend_in_duration = 0.0f;
 
 			// 今の動作の終わりの時間がワーピング終了フレーム
-			for (int i = now_frame; i < distance.size(); i++)
+			for (int i = now_frame; i < distance.size()-1; i++)
 			{
 				if (distance[i].movecheck == 0 && distance[i + 1].movecheck == 1)
 				{
@@ -1409,113 +1426,265 @@ void  InitDeformationParameter(
 
 		// ワーピング後のキー時刻の姿勢を取得するための計算
 
-		// 順運動学計算
-		static vector< Matrix4f >  seg_frame_array;
-		vector< Point3f >  joint_position_frame_array;
-		ForwardKinematics(param.org_pose, seg_frame_array, joint_position_frame_array);
-		param.key_pose = param.org_pose;
+		// モーションワーピング後のキー姿勢を末端部位の位置変更により更新
+		UpdateKeyposeByPosition(param, motion, furi);
 
-		// 何フレーム前かの姿勢情報を取得(値は仮のもの)
-		Posture before_posture = param.org_pose;
-
-		// 取得するフレームの時間
-		float before_time = param.key_time -  motion.interval;
-
-		// 何フレーム前かの姿勢情報を取得
-		motion.GetPosture(before_time, before_posture);
-
-		// 数フレーム前の姿勢の順運動学計算
-		static vector< Matrix4f >  before_seg_frame_array;
-		vector< Point3f >  before_joint_position_frame_array;
-
-		ForwardKinematics(before_posture, before_seg_frame_array, before_joint_position_frame_array);
-
-		// 骨格の追加情報を生成
-		// キャラクタの骨格情報
-		HumanBody* human_body;
-
-		human_body = new HumanBody(motion.body);
-
-		const char * primary_segment_names[NUM_PRIMARY_SEGMENTS];
-		primary_segment_names[SEG_R_FOOT] = "RightFoot";
-		primary_segment_names[SEG_L_FOOT] = "LeftFoot";
-		primary_segment_names[SEG_R_HAND] = "RightHand";
-		primary_segment_names[SEG_L_HAND] = "LeftHand";
-		primary_segment_names[SEG_PELVIS] = "Hips";
-		primary_segment_names[SEG_CHEST] = "Spine3"; //chest
-		primary_segment_names[SEG_HEAD] = "Neck";
-
-		for (int i = 0; i < NUM_PRIMARY_SEGMENTS; i++)
-		{
-			human_body->SetPrimarySegment((PrimarySegmentType)i, primary_segment_names[i]);
-		}
-
-		// 末端部位ごとにモーションワーピング後のキー時刻の姿勢を変形する
-		for (int i = 0; i < NUM_PRIMARY_SEGMENTS; i++)
-		{
-			// 末端部位の位置を取得
-			Point3f segment_positions[NUM_PRIMARY_SEGMENTS];
-			Point3f before_segment_positions[NUM_PRIMARY_SEGMENTS];
-			Vector3f vec;
-			Vector3f before_vec;
-
-			int seg_no = human_body->GetPrimarySegment((PrimarySegmentType)i);
-			if (seg_no != -1)
-			{
-				seg_frame_array[seg_no].get(&vec);
-				segment_positions[i] = vec;
-				before_seg_frame_array[seg_no].get(&before_vec);
-				before_segment_positions[i] = before_vec;
-			}
-			 
-			// 末端部位の位置から末端部位の移動の向きを計算
-			Vector3f move_vec;
-			move_vec = segment_positions[i] - before_segment_positions[i];
-
-			//// 軸足でない場合ノイズを付与
-			//if (i == 0 || i == 1)
-			//{
-			//	if (segment_positions[i].z > -2.0f)
-			//	{
-			//		// ノイズの座標
-			//		Point3f foot_noize;
-			//		float noize[3];
-
-			//		// 乱数を生成
-			//		std::random_device rd;
-			//		std::mt19937 gen(rd());
-			//		std::uniform_real_distribution<float> dist(-0.001f, 0.001f);
-
-			//		for (int i = 0; i < 3; i++) 
-			//		{
-			//			noize[i] = dist(gen);
-			//		}
-
-			//		foot_noize.x = noize[0];
-			//		foot_noize.y = noize[1];
-			//		foot_noize.z = noize[2];
-			//		move_vec += foot_noize;
-			//	}
-			//}
-
-			// フリレベルを倍率として移動距離を設定
-			move_vec = move_vec * furi[i];
-
-			Point3f ee_pos;
-			ee_pos = segment_positions[i];
-			ee_pos += move_vec;
-			ApplyInverseKinematicsCCD(param.key_pose, -1, seg_no, ee_pos);
-		}
+		// モーションワーピング後のキー姿勢を関節角度の回転速度の変更により更新
+		//UpdateKeyposeByVelocity(param, motion, furi);
 	}
+
+
 	// 動作が始まっていないときはワーピングを開始しない
 	else if (distance[now_frame].move_start == false)
 	{
-		param.blend_in_duration = 1000000;
-		param.blend_out_duration = 10000000;
-		param.key_time = 1000000;
+		param.blend_in_duration = -1000.0f;
+		param.blend_out_duration = 0;
+		param.key_time = 0;
 		motion.GetPosture(now_frame, param.org_pose);
 		param.key_pose = param.org_pose;
 	}
+}
+
+//
+//　モーションワーピング後のキー姿勢を末端部位の位置変更により更新
+//
+
+void UpdateKeyposeByPosition(MotionWarpingParam& param, Motion& motion, float furi[])
+{
+	// 順運動学計算
+	static vector< Matrix4f >  seg_frame_array;
+	vector< Point3f >  joint_position_frame_array;
+	ForwardKinematics(param.org_pose, seg_frame_array, joint_position_frame_array);
+	param.key_pose = param.org_pose;
+
+	// 1フレーム前の姿勢情報を取得(値は仮のもの)
+	Posture before_posture = param.org_pose;
+
+	// 取得するフレームの時間
+	float before_time = param.key_time - motion.interval;
+	if (before_time < 0.0f)
+		before_time = 0.0f;
+
+	// 1フレーム前の姿勢情報を取得
+	motion.GetPosture(before_time, before_posture);
+
+	// 数フレーム前の姿勢の順運動学計算
+	static vector< Matrix4f >  before_seg_frame_array;
+	vector< Point3f >  before_joint_position_frame_array;
+
+	ForwardKinematics(before_posture, before_seg_frame_array, before_joint_position_frame_array);
+
+	// 骨格の追加情報を生成
+	// キャラクタの骨格情報
+	HumanBody* human_body;
+
+	human_body = new HumanBody(motion.body);
+
+	const char* primary_segment_names[NUM_PRIMARY_SEGMENTS];
+	primary_segment_names[SEG_R_FOOT] = "RightFoot";
+	primary_segment_names[SEG_L_FOOT] = "LeftFoot";
+	primary_segment_names[SEG_R_HAND] = "RightHand";
+	primary_segment_names[SEG_L_HAND] = "LeftHand";
+	primary_segment_names[SEG_PELVIS] = "Hips";
+	primary_segment_names[SEG_CHEST] = "Spine3"; //chest
+	primary_segment_names[SEG_HEAD] = "Neck";
+
+	for (int i = 0; i < NUM_PRIMARY_SEGMENTS; i++)
+	{
+		human_body->SetPrimarySegment((PrimarySegmentType)i, primary_segment_names[i]);
+	}
+
+	// 末端部位ごとにモーションワーピング後のキー時刻の姿勢を変形する
+	for (int i = 0; i < NUM_PRIMARY_SEGMENTS; i++)
+	{
+		// 末端部位の位置を取得
+		Point3f segment_positions[NUM_PRIMARY_SEGMENTS];
+		Point3f before_segment_positions[NUM_PRIMARY_SEGMENTS];
+		Vector3f vec;
+		Vector3f before_vec;
+
+		int seg_no = human_body->GetPrimarySegment((PrimarySegmentType)i);
+		if (seg_no != -1)
+		{
+			seg_frame_array[seg_no].get(&vec);
+			segment_positions[i] = vec;
+			before_seg_frame_array[seg_no].get(&before_vec);
+			before_segment_positions[i] = before_vec;
+		}
+
+		// 末端部位の位置から末端部位の移動の向きを計算
+		Vector3f move_vec;
+		move_vec = segment_positions[i] - before_segment_positions[i];
+
+		//// 軸足でない場合ノイズを付与
+		//if (i == 0 || i == 1)
+		//{
+		//	if (segment_positions[i].z > -2.0f)
+		//	{
+		//		// ノイズの座標
+		//		Point3f foot_noize;
+		//		float noize[3];
+
+		//		// 乱数を生成
+		//		std::random_device rd;
+		//		std::mt19937 gen(rd());
+		//		std::uniform_real_distribution<float> dist(-0.001f, 0.001f);
+
+		//		for (int i = 0; i < 3; i++) 
+		//		{
+		//			noize[i] = dist(gen);
+		//		}
+
+		//		foot_noize.x = noize[0];
+		//		foot_noize.y = noize[1];
+		//		foot_noize.z = noize[2];
+		//		move_vec += foot_noize;
+		//	}
+		//}
+
+		// フリレベルを倍率として移動距離を設定
+		move_vec = move_vec * furi[i];
+
+		Point3f ee_pos;
+		ee_pos = before_segment_positions[i];
+		ee_pos += move_vec;
+
+		ApplyInverseKinematicsCCD(param.key_pose, -1, seg_no, ee_pos);
+	}
+	delete human_body;
+}
+
+//
+//　モーションワーピング後のキー姿勢を関節角度の回転速度の変更により更新
+//
+void UpdateKeyposeByVelocity(MotionWarpingParam& param, Motion& motion, float furi[])
+{
+	param.key_pose = param.org_pose;
+	// 1フレーム前の姿勢情報を取得(値は仮のもの)
+	Posture before_posture = param.org_pose;
+
+	// 取得するフレームの時間
+	float before_time = param.key_time - motion.interval;
+	if (before_time < 0.0f)
+		before_time = 0.0f;
+
+	// 1フレーム前の姿勢情報を取得
+	motion.GetPosture(before_time, before_posture);
+
+	// 骨格の追加情報を生成
+	// キャラクタの骨格情報
+	HumanBody* human_body = new HumanBody(motion.body);
+
+	const char* primary_joint_names[NUM_PRIMARY_JOINTS];
+	primary_joint_names[JOI_R_SHOULDER] = "RightArm";
+	primary_joint_names[JOI_L_SHOULDER] = "LeftArm";
+	primary_joint_names[JOI_R_ELBOW] = "RightForeArm";
+	primary_joint_names[JOI_L_ELBOW] = "LeftForeArm";
+	primary_joint_names[JOI_R_WRIST] = "RightHand";
+	primary_joint_names[JOI_L_WRIST] = "LeftHand";
+	primary_joint_names[JOI_R_HIP] = "RightUpLeg";
+	primary_joint_names[JOI_L_HIP] = "LeftUpLeg";
+	primary_joint_names[JOI_R_KNEE] = "RightLeg";
+	primary_joint_names[JOI_L_KNEE] = "LeftLeg";
+	primary_joint_names[JOI_R_ANKLE] = "RightFoot";
+	primary_joint_names[JOI_L_ANKLE] = "LeftFoot";
+	primary_joint_names[JOI_BACK] = "Spine";
+	primary_joint_names[JOI_NECK] = "Neck";
+
+	for (int i = 0; i < NUM_PRIMARY_JOINTS; i++)
+	{
+		human_body->SetPrimaryJoint((PrimaryJointType)i, primary_joint_names[i]);
+	}
+
+	// クォータニオンを用いた関節角度の回転速度の変更
+	Quat4f org_q, before_q, before_inv_q, diff_q;
+	Quat4f identity_q(0.0f, 0.0f, 0.0f, 1.0f); // 単位クォータニオン（回転ゼロ）
+	Quat4f scaled_diff_q, new_q;
+
+	// 実際に回転を確認する関節番号
+	int joint_no = -1;
+	// 回転倍率
+	float scale_ratio = 0.0f;
+
+	// 各主要関節ごとにモーションワーピング後のキー時刻の姿勢を変形する
+	for(int i=0; i<NUM_PRIMARY_JOINTS; i++)
+	{
+		// 関節番号のリセット
+		joint_no = -1;
+
+		// 実際に回転を確認する関節番号を取得
+		if (i == 6)
+		{
+			joint_no = human_body->GetPrimaryJoint(JOI_R_HIP);
+			// 回転倍率の設定
+			scale_ratio = furi[0];
+		}
+		else if (i == 7)
+		{
+			joint_no = human_body->GetPrimaryJoint(JOI_L_HIP);
+			// 回転倍率の設定
+			scale_ratio = furi[1];
+		}
+		else if (i == 0)
+		{
+			joint_no = human_body->GetPrimaryJoint(JOI_R_SHOULDER);
+			// 回転倍率の設定
+			scale_ratio = furi[2];
+		}
+		else if (i == 1)
+		{
+			joint_no = human_body->GetPrimaryJoint(JOI_L_SHOULDER);
+			// 回転倍率の設定
+			scale_ratio = furi[3];
+		}
+
+		else if (i == 12)
+		{
+			joint_no = human_body->GetPrimaryJoint(JOI_BACK);
+			// 回転倍率の設定
+			scale_ratio = furi[5];
+		}
+		else if (i == 13)
+		{
+			joint_no = human_body->GetPrimaryJoint(JOI_NECK);
+			// 回転倍率の設定
+			scale_ratio = furi[6];
+		}
+
+		// ルート関節以外の回転処理
+		// 関節が見つからない場合(-1)はスキップ
+		if (joint_no == -1)
+			continue;
+
+		org_q.set(param.org_pose.joint_rotations[joint_no]);
+		before_q.set(before_posture.joint_rotations[joint_no]);
+
+		// diff = org * before_inv
+		// before_inv を計算 (共役クォータニオン)
+		before_inv_q.x = -before_q.x;
+		before_inv_q.y = -before_q.y;
+		before_inv_q.z = -before_q.z;
+		before_inv_q.w = before_q.w;
+		// diff = org * before_inv
+		diff_q.mul(org_q, before_inv_q);
+
+		// scaled_diff = slerp(identity, diff, scale) = diff^scale
+		// 内積(dot)を計算
+		float dot_product = identity_q.x * diff_q.x + identity_q.y * diff_q.y + identity_q.z * diff_q.z + identity_q.w * diff_q.w;
+		// 最短経路を保証
+		if (dot_product < 0.0f)
+		{
+			diff_q.negate();
+		}
+		// 補間（SLERP）
+		scaled_diff_q.interpolate(identity_q, diff_q, scale_ratio);
+
+		// new = scaled_diff * org
+		new_q.mul(scaled_diff_q, before_q);
+
+		param.key_pose.joint_rotations[joint_no].set(new_q);
+	}
+	delete human_body;
 }
 
 

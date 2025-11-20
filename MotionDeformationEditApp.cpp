@@ -148,31 +148,31 @@ void  MotionDeformationEditApp::Display()
 		}
 
 		// ２つ目の動作の姿勢を描画
-		if (second_curr_posture)
-		{
-			glPushMatrix();
-			
-			//腰の位置を基準に２つの動作の位置を合わせる
-			//計算用変数
-			if (root_diff.x == NULL) {
-				Point3f p1, p2;
-				p1 = deformed_posture->root_pos;
-				p2 = second_curr_posture->root_pos;
+		//if (second_curr_posture)
+		//{
+		//	glPushMatrix();
+		//	
+		//	//腰の位置を基準に２つの動作の位置を合わせる
+		//	//計算用変数
+		//	if (root_diff.x == NULL) {
+		//		Point3f p1, p2;
+		//		p1 = deformed_posture->root_pos;
+		//		p2 = second_curr_posture->root_pos;
 
-				if (p1.x > -100000)
-					root_diff = p1 - p2;
-			}
-			glTranslatef(root_diff.x, root_diff.y, root_diff.z);
+		//		if (p1.x > -100000)
+		//			root_diff = p1 - p2;
+		//	}
+		//	glTranslatef(root_diff.x, root_diff.y, root_diff.z);
 
-			glEnable(GL_BLEND);
-			glColor4f(1.0f, 0.0f, 1.0f, 0.5f);
-			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-			DrawPosture(*second_curr_posture);
-			DrawPostureShadow(*second_curr_posture, shadow_dir, shadow_color);
-			glDisable(GL_BLEND);
+		//	glEnable(GL_BLEND);
+		//	glColor4f(1.0f, 0.0f, 1.0f, 0.5f);
+		//	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		//	DrawPosture(*second_curr_posture);
+		//	DrawPostureShadow(*second_curr_posture, shadow_dir, shadow_color);
+		//	glDisable(GL_BLEND);
 
-			glPopMatrix();
-		}
+		//	glPopMatrix();
+		//}
 	}
 
 	// キー姿勢編集モード

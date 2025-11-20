@@ -263,6 +263,12 @@ void  InitDeformationParameter( const Motion & motion, float key_time, float ble
 void  InitDeformationParameter(
 	float now_time, vector<DistanceParam> distance, MotionWarpingParam& param, TimeWarpingParam time_param, Motion& motion, float furi[]);
 
+// モーションワーピング後のキー姿勢を末端部位の位置変更により更新
+void UpdateKeyposeByPosition(MotionWarpingParam& param, Motion& motion, float furi[]);
+
+// モーションワーピング後のキー姿勢を関節角度の回転速度の変更により更新
+void UpdateKeyposeByVelocity(MotionWarpingParam& param, Motion& motion, float furi[]);
+
 // 動作変形（動作ワーピング）の適用後の動作を生成
 Motion *  GenerateDeformedMotion( const MotionWarpingParam & deform, const Motion & motion );
 
