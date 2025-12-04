@@ -19,6 +19,7 @@
 #include "HumanBody.h"
 #include <vector>
 
+#include <fstream> // 追加
 
 // プロトタイプ宣言
 class  Timeline;
@@ -153,6 +154,17 @@ class  MotionDeformationApp : public InverseKinematicsCCDApp
 	// タイムライン描画機能
 	Timeline *         timeline;
 
+  protected:
+	//  動作変形後のデータ出力のための変数
+	// 
+	// CSV出力ファイルストリーム
+	std::ofstream csv_file;
+
+	// 前フレームの各部位の位置（移動距離計算用）
+	Point3f prev_segment_positions[NUM_PRIMARY_SEGMENTS];
+
+	// 部位名とIDの変換用ヘルパー
+	HumanBody* my_human_body;
 
   public:
 	// コンストラクタ
@@ -209,7 +221,15 @@ class  MotionDeformationApp : public InverseKinematicsCCDApp
 	// 変形後の動作をBVH動作ファイルとして保存
 	void  SaveDeformedMotionAsBVH( const char * file_name );
 
+	// 動作変形後データの書き出し
+	void  ExportMotionData();
+
 };
+
+// 肩を利用したねじれの計算
+
+double CalcChestVal(const Motion* motion);
+
 
 //
 // 末端部位の移動距離の合計を求める処理

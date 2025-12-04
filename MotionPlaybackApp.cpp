@@ -56,8 +56,8 @@ void  MotionPlaybackApp::Initialize()
 	GLUTBaseApp::Initialize();
 
 	// サンプルBVH動作データを読み込み
-	//LoadBVH("fight_punch.bvh");
-	LoadBVH( "radio_middle_1_Char00.bvh" );
+	LoadBVH("fight_punch.bvh");
+	//LoadBVH( "radio_middle_1_Char00.bvh" );
 }
 
 

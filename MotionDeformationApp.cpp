@@ -25,6 +25,8 @@
 #define  _USE_MATH_DEFINES
 #include <math.h>
 #include <random>
+#include <numeric> // std::accumulate用
+#include <cmath>   // std::pow用
 
 //
 //  コンストラクタ
@@ -118,15 +120,53 @@ void  MotionDeformationApp::Initialize()
 	//}
 	//outputfile.close();
 
+	// HumanBodyのセットアップ
+	if (motion && motion->body) {
+		// 既存のmotion->bodyからHumanBodyを作成
+		my_human_body = new HumanBody(motion->body);
+
+		// 部位名の登録（既存コードと同じ定義を使用）
+		const char* primary_segment_names[NUM_PRIMARY_SEGMENTS];
+		primary_segment_names[SEG_R_FOOT] = "RightFoot";
+		primary_segment_names[SEG_L_FOOT] = "LeftFoot";
+		primary_segment_names[SEG_R_HAND] = "RightHand";
+		primary_segment_names[SEG_L_HAND] = "LeftHand";
+		primary_segment_names[SEG_PELVIS] = "Hips";
+		primary_segment_names[SEG_CHEST] = "Spine3";
+		primary_segment_names[SEG_HEAD] = "Neck";
+
+		for (int i = 0; i < NUM_PRIMARY_SEGMENTS; i++) {
+			my_human_body->SetPrimarySegment((PrimarySegmentType)i, primary_segment_names[i]);
+		}
+	}
+	else {
+		my_human_body = NULL;
+	}
+
+	// CSVファイルを開く（上書きモード）
+	csv_file.open("deformed_motion_data.csv");
+	// ヘッダー行を出力
+	if (csv_file.is_open()) {
+		csv_file << "Time,Frame,RightFoot_Dist,LeftFoot_Dist,RightHand_Dist,LeftHand_Dist,Pelvis_Dist,Chest_Dist,Head_Dist,Total_Dist" << std::endl;
+	}
+
+	// 前フレーム座標の初期化
+	for (int i = 0; i < NUM_PRIMARY_SEGMENTS; i++) {
+		prev_segment_positions[i] = Point3f(0, 0, 0);
+	}
+
 	// フリレベル・キレレベルの設定
 	furi[0] = 1.0f;
 	furi[1] = 1.0f;
 	furi[2] = 1.0f;
 	furi[3] = 1.0f;
 	furi[4] = 1.0f;
-	furi[5] = -20.0f;
-	furi[6] = -10.0f;
-	kire = 1.4f;
+	furi[5] = 1.0f;
+	furi[6] = 1.0f;
+	kire = 1.0f;
+
+	// ねじれの計算
+	double test1 = CalcChestVal(motion);
 
 	// 動作変形情報の初期化
 	InitParameter();
@@ -410,12 +450,79 @@ void  MotionDeformationApp::Animation( float delta )
 	// 動作変形（動作ワーピング）の適用後の姿勢の計算
 	weight = ApplyMotionDeformation( animation_time, deformation, *motion, *deformed_posture, timewarp_deformation, *deformed_posture );
 
+	// 動作変形後のデータを取得
+	//ExportMotionData();
+
 	// ２つ目の動作の姿勢を取得
  	second_motion->GetPosture(animation_time, *second_curr_posture);
 
 	//std::cout << "org_Posture: root_pos.x = " << org_posture->root_pos.x << std::endl;
 	//std::cout << "second_curr_Posture: root_pos.x = " << second_curr_posture->root_pos.x << std::endl;
 
+}
+
+
+//
+// 動作データのCSV出力処理
+//
+void MotionDeformationApp::ExportMotionData()
+{
+	// 必要なデータが揃っていなければ何もしない
+	if (!deformed_posture || !my_human_body || !csv_file.is_open())
+		return;
+
+	// 1. 順運動学計算 (Forward Kinematics)
+	// 現在の変形後姿勢から、空間上の座標を計算
+	static vector< Matrix4f > segment_frames;
+	ForwardKinematics(*deformed_posture, segment_frames);
+
+	float distances[NUM_PRIMARY_SEGMENTS];
+	float total_dist = 0.0f;
+
+	// 2. 各部位の移動距離計算
+	for (int i = 0; i < NUM_PRIMARY_SEGMENTS; i++)
+	{
+		// HumanBodyを使って、その部位に対応する関節番号を取得
+		int seg_no = my_human_body->GetPrimarySegment((PrimarySegmentType)i);
+
+		// 有効な関節番号であれば計算
+		if (seg_no != -1 && seg_no < segment_frames.size())
+		{
+			// Matrix4fから平行移動成分をVector3fで取り出す
+			Vector3f vec_pos;
+			segment_frames[seg_no].get(&vec_pos);
+
+			// 距離計算のためにPoint3fへ変換
+			Point3f current_pos = vec_pos;
+
+			// 最初のフレーム付近は移動距離0とする（初期化）
+			if (frame_no == 0 || animation_time <= 0.05f) {
+				distances[i] = 0.0f;
+			}
+			else {
+				// 前フレームとの距離を計算
+				distances[i] = current_pos.distance(prev_segment_positions[i]);
+			}
+
+			// 次のフレームのために現在位置を保存
+			prev_segment_positions[i] = current_pos;
+
+			total_dist += distances[i];
+		}
+		else {
+			distances[i] = 0.0f;
+		}
+	}
+
+	// 3. CSVへの書き出し
+	csv_file << animation_time << "," << frame_no;
+
+	// 各部位のデータを出力
+	for (int i = 0; i < NUM_PRIMARY_SEGMENTS; i++) {
+		csv_file << "," << distances[i];
+	}
+	// 合計値と改行を出力
+	csv_file << "," << total_dist << std::endl;
 }
 
 
@@ -428,13 +535,15 @@ void  MotionDeformationApp::InitMotion( int no )
 	if ( no == 0 )
 	{
 		// サンプルBVH動作データを読み込み
-		//LoadBVH( "stepshort_new_Char00.bvh" ); //move_amount = 2.79 or 3.1
-		//LoadBVH("radio_middle_3_Char00.bvh"); //move_amount = 5.45
-		LoadBVH("fight_punch.bvh");
+		LoadBVH( "stepshort_new_Char00.bvh" ); //3
+		//LoadBVH("radio_middle_3_Char00.bvh"); //4
+		//LoadBVH("fight_punch.bvh"); //4
+		//LoadBVH("radio_middle_2_Char00.bvh"); //4
 
-		//LoadSecondBVH("steplong_Char00.bvh");
+		LoadSecondBVH("steplong_Char00.bvh");
 		//LoadSecondBVH("radio_long_3_Char00.bvh");
-		LoadSecondBVH("fight_punch_key.bvh");
+		//LoadSecondBVH("fight_punch_key.bvh");
+		//LoadSecondBVH("radio_long_2_Char00.bvh"); //4
 		if ( !motion )
 			return;
 	}
@@ -601,6 +710,85 @@ void InitDistanceParameter(vector<DistanceParam> & param)
 	param.resize(0);
 }
 
+
+//
+// 肩を利用したねじれの計算
+//
+
+double CalcChestVal(const Motion* motion)
+{
+	if (!motion) return 0.0;
+
+	// 1. 関節の特定
+	// HumanBodyクラスを使って関節IDを取得します
+	HumanBody human_body(motion->body);
+
+	// 一般的なBVHでの名前に対応（RightArmが右肩、LeftArmが左肩に対応することが多い）
+	// お使いのボーン名に合わせて変更してください ("RightShoulder" など)
+	human_body.SetPrimaryJoint(JOI_R_SHOULDER, "RightArm");
+	human_body.SetPrimaryJoint(JOI_L_SHOULDER, "LeftArm");
+
+	int rShldrIdx = human_body.GetPrimaryJoint(JOI_R_SHOULDER);
+	int lShldrIdx = human_body.GetPrimaryJoint(JOI_L_SHOULDER);
+
+	// 関節が見つからない場合のフォールバック（名前が違う場合など）
+	if (rShldrIdx == -1 || lShldrIdx == -1) {
+		// 別の名前候補でも試す例
+		human_body.SetPrimaryJoint(JOI_R_SHOULDER, "RightShoulder");
+		human_body.SetPrimaryJoint(JOI_L_SHOULDER, "LeftShoulder");
+		rShldrIdx = human_body.GetPrimaryJoint(JOI_R_SHOULDER);
+		lShldrIdx = human_body.GetPrimaryJoint(JOI_L_SHOULDER);
+
+		if (rShldrIdx == -1 || lShldrIdx == -1) return 0.0;
+	}
+
+	std::vector<double> torsionValues;
+	torsionValues.reserve(motion->num_frames);
+
+	// 計算用の一時変数
+	Posture temp_posture;
+	std::vector< Matrix4f > seg_frames;
+	std::vector< Point3f > joint_positions;
+
+	// 2. 全フレームを走査
+	for (int i = 0; i < motion->num_frames; ++i)
+	{
+		// 時間から姿勢を取得
+		float time = i * motion->interval;
+		motion->GetPosture(time, temp_posture);
+
+		// 順運動学計算 (FK) で、関節のグローバル座標を取得
+		ForwardKinematics(temp_posture, seg_frames, joint_positions);
+
+		// 右肩と左肩の位置取得
+		Point3f rPos = joint_positions[rShldrIdx];
+		Point3f lPos = joint_positions[lShldrIdx];
+
+		// Z軸（奥行き）の差分を計算
+		// パンチ動作等は、片方の肩が前、もう片方が後ろに行くため、この値が大きく変動します
+		double zDiff = rPos.z - lPos.z;
+
+		torsionValues.push_back(zDiff);
+	}
+
+	// 3. 分散を計算
+	if (torsionValues.empty()) return 0.0;
+
+	// 平均値
+	double sum = std::accumulate(torsionValues.begin(), torsionValues.end(), 0.0);
+	double mean = sum / torsionValues.size();
+
+	// 分散
+	double sqSum = 0.0;
+	for (const double val : torsionValues) {
+		sqSum += std::pow(val - mean, 2);
+	}
+	double variance = sqSum / torsionValues.size();
+
+	return variance;
+}
+
+
 //
 // 末端部位の移動距離を測定
 //
@@ -720,8 +908,8 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, const ch
 			// 正負が一致しているかどうかを確認するフラグ(一致しなかったらtrue)
 			bool distanceadd_diff_check = false;
 			
-			// 前後3フレームの微分の正負が一致しないと極値と認めない
-			for (int j = 1; j < 4; j++)
+			// 前後3フレームの微分の正負が一致しないと極値と認めない(4か3)
+			for (int j = 1; j < 3; j++)
 			{
 				if(distanceadd_diff[i-j] < 0)
 					distanceadd_diff_check = true;
@@ -751,8 +939,8 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, const ch
 			// 正負が一致しているかどうかを確認するフラグ(一致しなかったらtrue)
 			bool distanceadd_diff_check = false;
 			
-			// 前後3フレームの微分の正負が一致しないと極値と認めない
-			for (int j = 1; j < 4; j++)
+			// 前後3フレームの微分の正負が一致しないと極値と認めない(4か3)
+			for (int j = 1; j < 3; j++)
 			{
 				if (distanceadd_diff[i - j] > 0)
 					distanceadd_diff_check = true;
@@ -1517,30 +1705,6 @@ void UpdateKeyposeByPosition(MotionWarpingParam& param, Motion& motion, float fu
 		move_vec = segment_positions[i] - before_segment_positions[i];
 
 		//// 軸足でない場合ノイズを付与
-		//if (i == 0 || i == 1)
-		//{
-		//	if (segment_positions[i].z > -2.0f)
-		//	{
-		//		// ノイズの座標
-		//		Point3f foot_noize;
-		//		float noize[3];
-
-		//		// 乱数を生成
-		//		std::random_device rd;
-		//		std::mt19937 gen(rd());
-		//		std::uniform_real_distribution<float> dist(-0.001f, 0.001f);
-
-		//		for (int i = 0; i < 3; i++) 
-		//		{
-		//			noize[i] = dist(gen);
-		//		}
-
-		//		foot_noize.x = noize[0];
-		//		foot_noize.y = noize[1];
-		//		foot_noize.z = noize[2];
-		//		move_vec += foot_noize;
-		//	}
-		//}
 
 		// フリレベルを倍率として移動距離を設定
 		move_vec = move_vec * furi[i];
