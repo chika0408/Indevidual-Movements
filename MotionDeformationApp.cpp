@@ -589,8 +589,8 @@ void  MotionDeformationApp::InitMotion( int no )
 		//LoadBVH("radio_middle_2_Char00.bvh"); //4
 
 		//LoadBVH("pointshort_Char00.bvh");
-		LoadBVH("radio_new_8_Char00.bvh");
-		LoadSecondBVH("radio_long_8_Char00.bvh");
+		LoadBVH("radio_new_7_Char00.bvh");
+		LoadSecondBVH("radio_long_7_Char00.bvh");
 
 		//LoadSecondBVH("steplong_Char00.bvh");
 		//LoadSecondBVH("radio_long_3_Char00.bvh");
@@ -942,163 +942,122 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, const ch
 		param[i].distanceadd = param[i].distanceadd / 21;
 	}
 
-	// distanceaddのフレーム間の差分（＝微分）
-	vector<float> distanceadd_diff;
-	for(int i = 1; i < param.size(); i++)
-		distanceadd_diff.push_back(param[i].distanceadd - param[i-1].distanceadd);
+	// --- 後半：セグメンテーションロジックの刷新 ---
 
-	// 極大値を取るときのフレーム番号
-	vector<int> distance_ex_plus;
-	// 極小値を取るときのフレーム番号
-	vector<int> distance_ex_minus;
-
-	for (int i = 5; i < distanceadd_diff.size()-5; i++)
-	{
-		// 極大値を探す
-		if (distanceadd_diff[i] < 0 && distanceadd_diff[i - 1] > 0)
-		{
-			// 正負が一致しているかどうかを確認するフラグ(一致しなかったらtrue)
-			bool distanceadd_diff_check = false;
-			
-			// 前後3フレームの微分の正負が一致しないと極値と認めない(4か3)
-			for (int j = 1; j < 3; j++)
-			{
-				if(distanceadd_diff[i-j] < 0)
-					distanceadd_diff_check = true;
-				if(distanceadd_diff[i+j] > 0)
-					distanceadd_diff_check = true;
-			}
-
-			// 10フレーム空いていないと極値と認めない
-			for (int j = 0; j < distance_ex_plus.size(); j++)
-			{
-				if (i - 50 < distance_ex_plus[j])
-					distanceadd_diff_check = true;
-			}
-			for (int j = 0; j < distance_ex_minus.size(); j++)
-			{
-				if (i - 50 < distance_ex_minus[j])
-					distanceadd_diff_check = true;
-			}
-			
-			if(distanceadd_diff_check == false)
-				distance_ex_plus.push_back(i);
+	// 1. 統計情報の取得（全体の平均・最小・最大）
+	float max_val = 0.0f;
+	float min_val = 100000.0f;
+	float avg_val = 0.0f;
+	for (const auto& p : param) {
+		if (p.distanceadd != 0.0f) {
+			if (p.distanceadd > max_val) max_val = p.distanceadd;
+			if (p.distanceadd < min_val) min_val = p.distanceadd;
 		}
+		avg_val += p.distanceadd;
+	}
+	avg_val /= param.size();
 
-		// 極小値を探す
-		if (distanceadd_diff[i] > 0 && distanceadd_diff[i - 1] < 0)
-		{
-			// 正負が一致しているかどうかを確認するフラグ(一致しなかったらtrue)
-			bool distanceadd_diff_check = false;
-			
-			// 前後3フレームの微分の正負が一致しないと極値と認めない(4か3)
-			for (int j = 1; j < 3; j++)
-			{
-				if (distanceadd_diff[i - j] > 0)
-					distanceadd_diff_check = true;
-				if (distanceadd_diff[i + j] < 0)
-					distanceadd_diff_check = true;
-			}
+	// 2. 閾値の設定 (ヒステリシス)
+	// ベース閾値：最小値（ノイズレベル）と平均値の間などから決定
+	// ※データによって調整してください。平均の60%程度を活動基準と仮定しています。
+	float threshold_ratio = 0.6f;
+	float base_threshold = avg_val * threshold_ratio;
 
-			// 10フレーム空いていないと極値と認めない
-			for (int j = 0; j < distance_ex_plus.size(); j++)
-			{
-				if (i - 50 < distance_ex_plus[j])
-					distanceadd_diff_check = true;
-			}
-			for (int j = 0; j < distance_ex_minus.size(); j++)
-			{
-				if (i - 50 < distance_ex_minus[j])
-					distanceadd_diff_check = true;
-			}
-			
-			if (distanceadd_diff_check == false)
-				distance_ex_minus.push_back(i);
+	// ノイズフロア対策：あまりに閾値が低すぎる場合は底上げする (例: 1.0)
+	//if (base_threshold < 1.0f) base_threshold = 1.0f;
+
+	float high_thresh = base_threshold * 1.2f; // 開始判定用（高め）
+	float low_thresh = base_threshold * 0.8f; // 終了判定用（低め）
+
+	// 3. 閾値判定 (Pass 1)
+	bool is_moving = false;
+	for (int i = 0; i < param.size(); i++) {
+		if (!is_moving) {
+			// 静止 -> 動作：高い閾値を超える必要がある
+			if (param[i].distanceadd > high_thresh) is_moving = true;
+		}
+		else {
+			// 動作 -> 静止：低い閾値を下回る必要がある
+			if (param[i].distanceadd < low_thresh) is_moving = false;
+		}
+		param[i].movecheck = is_moving ? 1 : 0;
+		param[i].move_amount = base_threshold; // デバッグ表示用に保存
+	}
+
+	// 4. ギャップ結合 (Gap Closing) (Pass 2)
+	// 動作と動作の間の隙間が短すぎる場合、繋げて一つの動作にする
+	// これにより「不必要に細かく分割される」のを防ぐ
+	int min_gap_frames = 20; // 例: 20フレーム(約0.6秒)未満の隙間は埋める
+	int last_move_end = -1;
+
+	// 最初の動作開始点を探す
+	int first_move_idx = -1;
+	for (int i = 0; i < param.size(); i++) {
+		if (param[i].movecheck == 1) {
+			first_move_idx = i;
+			break;
 		}
 	}
 
-		// 極小値・極大値の個数を少ない方に合わせる(オーバーフロー防止)
-		int distance_ex_size;
-		if(distance_ex_plus.size() >= distance_ex_minus.size())
-			distance_ex_size = distance_ex_minus.size();
-		else
-			distance_ex_size = distance_ex_plus.size();
-
-		// 閾値の設定に用いる極大値・極小値を定める
-		// iは定めるフレーム
-		for (int i = 0; i < distanceadd_diff.size(); i++)
-		{
-			int j=0, l=0;
-			// jは極大値検索用
-			if (distance_ex_plus.size() > 1)
-			{
-				for (j = 1; j < distance_ex_plus.size() - 1; j++)
-				{
-					if (i < distance_ex_plus[j])
-					{
-						if (fabs(i - distance_ex_plus[j]) > fabs(i - distance_ex_plus[j - 1]))
-						{
-							j = j - 1;
-						}
-						if (distance_ex_plus.size() < j)
-							j = distance_ex_plus.size() - 1;
-						break;
+	if (first_move_idx != -1) {
+		last_move_end = first_move_idx; // 仮置き
+		// 動作終了点を探して更新していく
+		for (int i = first_move_idx; i < param.size(); i++) {
+			if (param[i].movecheck == 1) {
+				// 前回の動作終了から今回の動作開始までの距離をチェック
+				int gap = i - last_move_end;
+				// ギャップがあり、かつ指定フレーム未満なら埋める
+				if (gap > 1 && gap < min_gap_frames) {
+					for (int k = last_move_end + 1; k < i; k++) {
+						param[k].movecheck = 1;
 					}
 				}
+				last_move_end = i;
 			}
-			// lは極小値検索用
-			if (distance_ex_minus.size() > 1)
-			{
-				for (l = 1; l < distance_ex_minus.size() - 1; l++)
-				{
-					if (i < distance_ex_minus[l])
-					{
-						if (fabs(i - distance_ex_minus[l]) > fabs(i - distance_ex_minus[l - 1]))
-						{
-							l = l - 1;
-						}
-						if (distance_ex_minus.size() < l)
-							l = distance_ex_minus.size() - 1;
-						break;
-					}
+		}
+	}
+
+	// 5. 短小ノイズ除去 (Noise Removal) (Pass 3)
+	// 動作区間が短すぎる場合、ノイズとみなして静止にする
+	// これにより「一瞬だけの誤検出」を防ぐ
+	int min_duration_frames = 15; // 例: 15フレーム(0.5秒)未満の動作は無視
+	int current_run = 0;
+	for (int i = 0; i < param.size(); i++) {
+		if (param[i].movecheck == 1) {
+			current_run++;
+		}
+		else {
+			if (current_run > 0 && current_run < min_duration_frames) {
+				// 短すぎる区間を消去
+				for (int k = i - current_run; k < i; k++) {
+					param[k].movecheck = 0;
 				}
-			}	
-			param[i].move_amount =
-				param[distance_ex_minus[l]].distanceadd + (param[distance_ex_plus[j]].distanceadd - param[distance_ex_minus[l]].distanceadd) / 5;
-		}
-
-		// 閾値を平滑化する
-		for (int i = 5; i < param.size() - 5; i++)
-		{
-			for (int j = 1; j < 6; j++)
-			{
-				param[i].move_amount += param[i + j].move_amount;
-				param[i].move_amount += param[i - j].move_amount;
 			}
-			param[i].move_amount = param[i].move_amount / 11;
+			current_run = 0;
 		}
+	}
+	// 配列末尾の処理
+	if (current_run > 0 && current_run < min_duration_frames) {
+		for (int k = param.size() - current_run; k < param.size(); k++) {
+			param[k].movecheck = 0;
+		}
+	}
 
+	// 6. move_startフラグの設定（既存ロジックを踏襲）
+	// 「一度でも動作が開始されたら、それ以降はずっとtrue」
 	for (int i = 0; i < param.size(); i++)
 	{
-		// movecheckの設定
-		if(param[i].distanceadd < param[i].move_amount)
-			param[i].movecheck = 0;
-		else
-			param[i].movecheck = 1;
-
-		// movestartの設定
-		if(param[i].movecheck == 1)
+		if (param[i].movecheck == 1)
 			param[i].move_start = true;
 		else
 		{
 			param[i].move_start = false;
-			if(i > 0){
-				if(param[i-1].move_start)
+			if (i > 0) {
+				if (param[i - 1].move_start)
 					param[i].move_start = true;
 			}
 		}
 	}
-	delete human_body;
 }
 
 
