@@ -112,6 +112,9 @@ class  MotionDeformationApp : public InverseKinematicsCCDApp
 	// キレレベル
 	float		kire;
 
+	// 編集中のレベル
+	int			selected_param;
+
 	// ２つ目の動作データ
 	Motion*		second_motion;
 

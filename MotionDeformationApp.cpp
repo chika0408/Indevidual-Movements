@@ -161,15 +161,18 @@ void  MotionDeformationApp::Initialize()
 	furi[2] = 1.0f;
 	furi[3] = 1.0f;
 	furi[4] = 1.0f;
-	furi[5] = 1.0f;
-	furi[6] = 1.0f;
-	kire = 1.0f;
+	furi[5] = 20.0f;
+	furi[6] = 20.0f;
+	kire = 0.9f;
+
+	// 編集中のレベルの設定
+	selected_param = 0;
 
 	// ねじれの計算
 	double test1 = CalcChestVal(motion);
 
 	// 動作変形情報の初期化
-	InitParameter();
+	//InitParameter();
 
 	// タイムライン描画機能の初期化
 	timeline = new Timeline();
@@ -278,6 +281,18 @@ void  MotionDeformationApp::Display()
 		sprintf( message, "%.2f (%d)", animation_time, frame_no );
 		DrawTextInformation( 1, message );
 	}
+
+	// 現在編集中のパラメータを表示
+	char param_msg[128];
+	const char* part_names[] = { "R_Foot", "L_Foot", "R_Hand", "L_Hand", "Hips", "Chest", "Head", "Kire" };
+
+	// 選択中の項目と値を表示
+	if (selected_param >= 0 && selected_param <= 7) 
+	{
+		float val = (selected_param == 7) ? kire : furi[selected_param];
+		sprintf(param_msg, "EDIT: %s = %.2f (Use [ / ] to change)", part_names[selected_param], val);
+		DrawTextInformation(4, param_msg); 
+	}
 }
 
 
@@ -344,9 +359,42 @@ void  MotionDeformationApp::Keyboard( unsigned char key, int mx, int my )
 	GLUTBaseApp::Keyboard( key, mx, my );
 
 	// 数字キーで入力動作・動作変形情報を変更
-	if ( ( key >= '1' ) && ( key <= '9' ) )
+	//if ( ( key >= '1' ) && ( key <= '9' ) )
+	//{
+	//	InitMotion( key - '1' );
+	//}
+
+	// 数字キーで編集するレベルの選択（0-6が各部位のフリ・7がキレ）
+	if (key >= '0' && key <= '6')
 	{
-		InitMotion( key - '1' );
+		selected_param = key - '0';
+	}
+	else if (key == '7')
+	{
+		selected_param = 7;
+	}
+
+	//  レベルの増減 ( [ キーで減少、 ] キーで増加 )
+	if (key == '[' || key == ']')
+	{
+		float delta = (key == ']') ? 1.0f : -1.0f; // 変化量
+
+		if (selected_param == 7) // キレレベル
+		{
+			kire += delta;
+		}
+		else if (selected_param >= 0 && selected_param < 7) // フリレベル
+		{
+			furi[selected_param] += delta;
+		}
+
+		// タイムラインの情報を更新
+		//if (timeline && motion)
+		//{
+		//	TimeWarpingParam temp_param = timewarp_deformation;
+		//	// タイムラインを現在の kire 値で再構築
+		//	InitTimeline(timeline, *motion, deformation, temp_param, animation_time);
+		//}
 	}
 
 	// d キーで表示姿勢の変更
@@ -451,7 +499,7 @@ void  MotionDeformationApp::Animation( float delta )
 	weight = ApplyMotionDeformation( animation_time, deformation, *motion, *deformed_posture, timewarp_deformation, *deformed_posture );
 
 	// 動作変形後のデータを取得
-	//ExportMotionData();
+	ExportMotionData();
 
 	// ２つ目の動作の姿勢を取得
  	second_motion->GetPosture(animation_time, *second_curr_posture);
@@ -535,12 +583,16 @@ void  MotionDeformationApp::InitMotion( int no )
 	if ( no == 0 )
 	{
 		// サンプルBVH動作データを読み込み
-		LoadBVH( "stepshort_new_Char00.bvh" ); //3
+		//LoadBVH( "stepshort_new_Char00.bvh" ); //3
 		//LoadBVH("radio_middle_3_Char00.bvh"); //4
 		//LoadBVH("fight_punch.bvh"); //4
 		//LoadBVH("radio_middle_2_Char00.bvh"); //4
 
-		LoadSecondBVH("steplong_Char00.bvh");
+		//LoadBVH("pointshort_Char00.bvh");
+		LoadBVH("radio_new_8_Char00.bvh");
+		LoadSecondBVH("radio_long_8_Char00.bvh");
+
+		//LoadSecondBVH("steplong_Char00.bvh");
 		//LoadSecondBVH("radio_long_3_Char00.bvh");
 		//LoadSecondBVH("fight_punch_key.bvh");
 		//LoadSecondBVH("radio_long_2_Char00.bvh"); //4
@@ -920,12 +972,12 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, const ch
 			// 10フレーム空いていないと極値と認めない
 			for (int j = 0; j < distance_ex_plus.size(); j++)
 			{
-				if (i - 10 < distance_ex_plus[j])
+				if (i - 50 < distance_ex_plus[j])
 					distanceadd_diff_check = true;
 			}
 			for (int j = 0; j < distance_ex_minus.size(); j++)
 			{
-				if (i - 10 < distance_ex_minus[j])
+				if (i - 50 < distance_ex_minus[j])
 					distanceadd_diff_check = true;
 			}
 			
@@ -951,12 +1003,12 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, const ch
 			// 10フレーム空いていないと極値と認めない
 			for (int j = 0; j < distance_ex_plus.size(); j++)
 			{
-				if (i - 10 < distance_ex_plus[j])
+				if (i - 50 < distance_ex_plus[j])
 					distanceadd_diff_check = true;
 			}
 			for (int j = 0; j < distance_ex_minus.size(); j++)
 			{
-				if (i - 10 < distance_ex_minus[j])
+				if (i - 50 < distance_ex_minus[j])
 					distanceadd_diff_check = true;
 			}
 			
@@ -1615,10 +1667,10 @@ void  InitDeformationParameter(
 		// ワーピング後のキー時刻の姿勢を取得するための計算
 
 		// モーションワーピング後のキー姿勢を末端部位の位置変更により更新
-		UpdateKeyposeByPosition(param, motion, furi);
+		//UpdateKeyposeByPosition(param, motion, furi);
 
 		// モーションワーピング後のキー姿勢を関節角度の回転速度の変更により更新
-		//UpdateKeyposeByVelocity(param, motion, furi);
+		UpdateKeyposeByVelocity(param, motion, furi);
 	}
 
 

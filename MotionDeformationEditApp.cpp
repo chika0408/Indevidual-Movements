@@ -148,31 +148,31 @@ void  MotionDeformationEditApp::Display()
 		}
 
 		// ２つ目の動作の姿勢を描画
-		//if (second_curr_posture)
-		//{
-		//	glPushMatrix();
-		//	
-		//	//腰の位置を基準に２つの動作の位置を合わせる
-		//	//計算用変数
-		//	if (root_diff.x == NULL) {
-		//		Point3f p1, p2;
-		//		p1 = deformed_posture->root_pos;
-		//		p2 = second_curr_posture->root_pos;
+		if (second_curr_posture)
+		{
+			glPushMatrix();
+			
+			//腰の位置を基準に２つの動作の位置を合わせる
+			//計算用変数
+			if (root_diff.x == NULL) {
+				Point3f p1, p2;
+				p1 = deformed_posture->root_pos;
+				p2 = second_curr_posture->root_pos;
 
-		//		if (p1.x > -100000)
-		//			root_diff = p1 - p2;
-		//	}
-		//	glTranslatef(root_diff.x, root_diff.y, root_diff.z);
+				if (p1.x > -100000)
+					root_diff = p1 - p2;
+			}
+			glTranslatef(root_diff.x, root_diff.y, root_diff.z);
 
-		//	glEnable(GL_BLEND);
-		//	glColor4f(1.0f, 0.0f, 1.0f, 0.5f);
-		//	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		//	DrawPosture(*second_curr_posture);
-		//	DrawPostureShadow(*second_curr_posture, shadow_dir, shadow_color);
-		//	glDisable(GL_BLEND);
+			glEnable(GL_BLEND);
+			glColor4f(1.0f, 0.0f, 1.0f, 0.5f);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			DrawPosture(*second_curr_posture);
+			DrawPostureShadow(*second_curr_posture, shadow_dir, shadow_color);
+			glDisable(GL_BLEND);
 
-		//	glPopMatrix();
-		//}
+			glPopMatrix();
+		}
 	}
 
 	// キー姿勢編集モード
@@ -224,6 +224,18 @@ void  MotionDeformationEditApp::Display()
 	}
 	sprintf(message, "animation_speed = %.1f", animation_speed);
 	DrawTextInformation( 3, message);
+
+	// 現在編集中のパラメータを表示
+	char param_msg[128];
+	const char* part_names[] = { "R_Foot", "L_Foot", "R_Hand", "L_Hand", "Hips", "Chest", "Head", "Kire" };
+
+	// 選択中の項目と値を表示
+	if (selected_param >= 0 && selected_param <= 7)
+	{
+		float val = (selected_param == 7) ? kire : furi[selected_param];
+		sprintf(param_msg, "EDIT: %s = %.2f (Use [ / ] to change)", part_names[selected_param], val);
+		DrawTextInformation(4, param_msg);
+	}
 
 	//DrawGraph();
 }
@@ -387,9 +399,42 @@ void  MotionDeformationEditApp::Keyboard( unsigned char key, int mx, int my )
 	GLUTBaseApp::Keyboard( key, mx, my );
 
 	// 数字キーで入力動作・動作変形情報を変更
-	if ( ( key >= '1' ) && ( key <= '9' ) )
+	//if ( ( key >= '1' ) && ( key <= '9' ) )
+	//{
+	//	InitMotion( key - '1' );
+	//}
+
+	// 数字キーで編集するレベルの選択（0-6が各部位のフリ・7がキレ）
+	if (key >= '0' && key <= '6')
 	{
-		InitMotion( key - '1' );
+		selected_param = key - '0';
+	}
+	else if (key == '7')
+	{
+		selected_param = 7;
+	}
+
+	//  レベルの増減 ( [ キーで減少、 ] キーで増加 )
+	if (key == '[' || key == ']')
+	{
+		float delta = (key == ']') ? 1.0f : -1.0f; // 変化量
+
+		if (selected_param == 7) // キレレベル
+		{
+			kire += delta;
+		}
+		else if (selected_param >= 0 && selected_param < 7) // フリレベル
+		{
+			furi[selected_param] += delta;
+		}
+
+		// タイムラインの情報を更新
+		//if (timeline && motion)
+		//{
+		//	TimeWarpingParam temp_param = timewarp_deformation;
+		//	// タイムラインを現在の kire 値で再構築
+		//	InitTimeline(timeline, *motion, deformation, temp_param, animation_time);
+		//}
 	}
 
 	// スペースキーでモードを変更
