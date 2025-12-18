@@ -155,6 +155,12 @@ void  MotionDeformationApp::Initialize()
 		prev_segment_positions[i] = Point3f(0, 0, 0);
 	}
 
+	// 【追加】キャッシュ変数の初期化
+	cached_segment_pos_offsets.clear();
+	cached_segment_rot_offsets.clear();
+	// 最初のフレームで必ず計算が走るように、ありえない値で初期化
+	for (int i = 0; i < 7; i++) prev_furi[i] = -999.9f;
+
 	// フリレベル・キレレベルの設定
 	furi[0] = 1.0f;
 	furi[1] = 1.0f;
@@ -498,6 +504,31 @@ void  MotionDeformationApp::Animation( float delta )
 	// 動作変形（動作ワーピング）の適用後の姿勢の計算
 	weight = ApplyMotionDeformation( animation_time, deformation, *motion, *deformed_posture, timewarp_deformation, *deformed_posture );
 
+	// 【追加】過去の動作からの累積オフセットを取得して適用
+	Vector3f cumulative_pos;
+	Quat4f cumulative_rot;
+
+	// ここで高速化された関数を呼ぶ
+	GetCumulativeOffset(animation_time, cumulative_pos, cumulative_rot);
+
+	// 1. 回転の適用: 累積回転 * 現在の姿勢回転
+	// Matrix3f同士の乗算やMatrix*Quatが直接できないため、Quatに変換して計算
+	Quat4f current_rot_q;
+	current_rot_q.set(deformed_posture->root_ori); // Matrix -> Quat
+
+	Quat4f final_rot_q;
+	// 累積回転を「左から」かけるか「右から」かけるかは、回転の定義（グローバル/ローカル）によりますが、
+	// 通常、移動方向を変えるための全体の回転であれば左からかけます。
+	final_rot_q.mul(cumulative_rot, current_rot_q);
+
+	// 計算結果をMatrixに戻す
+	deformed_posture->root_ori.set(final_rot_q); // Quat -> Matrix
+
+	// 2. 位置の適用: (現在の位置) + (累積位置)
+	// 回転の影響を受けた座標系であれば回転後に足すのが一般的です
+	deformed_posture->root_pos = deformed_posture->root_pos + cumulative_pos;
+
+
 	// 動作変形後のデータを取得
 	ExportMotionData();
 
@@ -589,8 +620,8 @@ void  MotionDeformationApp::InitMotion( int no )
 		//LoadBVH("radio_middle_2_Char00.bvh"); //4
 
 		//LoadBVH("pointshort_Char00.bvh");
-		LoadBVH("radio_new_7_Char00.bvh");
-		LoadSecondBVH("radio_long_7_Char00.bvh");
+		LoadBVH("radio_new_4_Char00.bvh");
+		LoadSecondBVH("radio_long_4_Char00.bvh");
 
 		//LoadSecondBVH("steplong_Char00.bvh");
 		//LoadSecondBVH("radio_long_3_Char00.bvh");
@@ -735,6 +766,127 @@ void  MotionDeformationApp::LoadSecondBVH(const char* file_name)
 }
 
 
+//
+// 累積オフセットの計算 
+//
+
+void MotionDeformationApp::GetCumulativeOffset(float current_time, Vector3f& out_pos_offset, Quat4f& out_rot_offset)
+{
+	// 1. パラメータ変更の検知
+	bool is_param_changed = false;
+	for (int i = 0; i < 7; i++) {
+		// 浮動小数の誤差を考慮して比較
+		if (fabs(prev_furi[i] - furi[i]) > 0.001f) {
+			is_param_changed = true;
+			prev_furi[i] = furi[i]; // 現在の値を保存
+		}
+	}
+
+	// パラメータが変わった場合（スライダー操作時など）はキャッシュをクリアして再計算させる
+	if (is_param_changed) {
+		cached_segment_pos_offsets.clear();
+		cached_segment_rot_offsets.clear();
+	}
+
+	// 2. オフセットの計算と蓄積
+	out_pos_offset.set(0.0f, 0.0f, 0.0f);
+	out_rot_offset.set(0.0f, 0.0f, 0.0f, 1.0f); // 単位クォータニオン
+
+	int segment_count = 0; // 処理したセグメント数
+
+	// distanceinfoを走査して動作区間（セグメント）を確認
+	for (int i = 0; i < (int)distanceinfo.size() - 1; i++)
+	{
+		// 動作の開始点 (0 -> 1) を検出
+		if (distanceinfo[i].movecheck == 0 && distanceinfo[i + 1].movecheck == 1)
+		{
+			int start_frame = i + 1;
+			int end_frame = (int)distanceinfo.size() - 1;
+
+			// 動作の終了点 (1 -> 0) を検索
+			for (int j = start_frame; j < (int)distanceinfo.size() - 1; j++)
+			{
+				if (distanceinfo[j].movecheck == 1 && distanceinfo[j + 1].movecheck == 0)
+				{
+					end_frame = j;
+					break;
+				}
+			}
+
+			float segment_end_time = end_frame * motion->interval;
+
+			// このセグメントが「完全に過去」である場合のみ累積に加算する
+			if (current_time > segment_end_time)
+			{
+				// キャッシュの利用確認
+				if (segment_count < (int)cached_segment_pos_offsets.size())
+				{
+					// 【高速化】キャッシュ済みなら値を加算するだけ
+					out_pos_offset = out_pos_offset + cached_segment_pos_offsets[segment_count];
+
+					Quat4f temp = out_rot_offset;
+					out_rot_offset.mul(cached_segment_rot_offsets[segment_count], temp);
+				}
+				else
+				{
+					// 【計算】キャッシュがない場合のみ、IKを含む重い計算を行う
+
+					// セグメントの中間地点を計算用時刻とする
+					float mid_time = (start_frame * motion->interval + segment_end_time) / 2.0f;
+
+					MotionWarpingParam seg_param;
+					// 現在のfuriレベルを使って変形パラメータを計算
+					InitDeformationParameter(mid_time, distanceinfo, seg_param, timewarp_deformation, *motion, furi);
+
+					// 変形による位置の差分 (変形後 - 変形前)
+					Vector3f pos_diff = seg_param.key_pose.root_pos - seg_param.org_pose.root_pos;
+
+					// 変形による回転の差分 (Diff = Modified * Original^-1)
+					// 行列を直接扱わず、クォータニオンに変換して計算
+					Quat4f q_key, q_org;
+					q_key.set(seg_param.key_pose.root_ori); // 行列からセット
+					q_org.set(seg_param.org_pose.root_ori); // 行列からセット
+
+					// orgの逆回転（共役クォータニオン）を作成
+					Quat4f q_org_inv;
+					q_org_inv.x = -q_org.x;
+					q_org_inv.y = -q_org.y;
+					q_org_inv.z = -q_org.z;
+					q_org_inv.w = q_org.w;
+
+					// 差分回転 = Key * Org^-1
+					Quat4f rot_diff;
+					rot_diff.mul(q_key, q_org_inv);
+
+					// 計算結果をキャッシュに保存
+					cached_segment_pos_offsets.push_back(pos_diff);
+					cached_segment_rot_offsets.push_back(rot_diff);
+
+					// 結果を加算
+					out_pos_offset = out_pos_offset + pos_diff;
+					Quat4f temp = out_rot_offset;
+					out_rot_offset.mul(rot_diff, temp);
+				}
+
+				segment_count++; // 完了したセグメント数をカウント
+			}
+			else
+			{
+				// 現在進行中または未来のセグメントなので、これ以上過去の累積はない
+				break;
+			}
+
+			// 次の探索位置へ
+			i = end_frame;
+		}
+	}
+
+	// 巻き戻し再生やリセット対応：もしキャッシュが実際の進行より多ければ（未来の分があれば）削除する
+	if (segment_count < (int)cached_segment_pos_offsets.size()) {
+		cached_segment_pos_offsets.resize(segment_count);
+		cached_segment_rot_offsets.resize(segment_count);
+	}
+}
 
 //
 //  変形後の動作をBVH動作ファイルとして保存
@@ -1926,8 +2078,8 @@ float  ApplyMotionDeformation( float time, const MotionWarpingParam & deform, Mo
 	float  ratio = 0.0f;
 	if(warping_time <= deform.key_time)
 		ratio = (warping_time - deform.blend_in_duration) / (deform.key_time - deform.blend_in_duration);
-	if(warping_time > deform.key_time)
-		ratio = (deform.blend_out_duration - warping_time) / (deform.blend_out_duration - deform.key_time);
+	if (warping_time > deform.key_time)
+		ratio = 1.0f;
 
 
 	// 姿勢変形（２つの姿勢の差分（dest - src）に重み ratio をかけたものを元の姿勢 org に加える ）

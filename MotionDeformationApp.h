@@ -124,6 +124,15 @@ class  MotionDeformationApp : public InverseKinematicsCCDApp
 	// モーションワーピングの重み表示用
 	float		weight;
 
+  protected:
+	// 【追加】連続動作・高速化のためのキャッシュ変数
+	std::vector<Vector3f> cached_segment_pos_offsets; // 各動作区間の位置オフセット
+	std::vector<Quat4f>   cached_segment_rot_offsets; // 各動作区間の回転オフセット
+	float prev_furi[7];   // 変更検知用の前回のフリレベル
+
+	// 【追加】累積オフセット計算関数の宣言
+	void GetCumulativeOffset(float current_time, Vector3f& out_pos_offset, Quat4f& out_rot_offset);
+
 
   protected:
 	// 動作再生のための変数
