@@ -634,7 +634,7 @@ void  MotionDeformationApp::InitMotion( int no )
 		//LoadBVH("radio_middle_2_Char00.bvh"); //4
 
 		//LoadBVH("pointshort_Char00.bvh");
-		LoadBVH("radio_long_4_Char00.bvh");
+		LoadBVH("radio_long_4_Char00_deformed.bvh");
 		LoadSecondBVH("radio_long_4_Char00.bvh");
 
 		//LoadSecondBVH("steplong_Char00.bvh");
@@ -989,9 +989,28 @@ void  MotionDeformationApp::SaveDeformedMotionAsBVH( const char * file_name )
 			// 回転情報の書き出し
 			else
 			{
+				// ここで関節に対応する回転行列を取得
+				Matrix3f rot_mat;
+
+				if (joint->parent == NULL) {
+					// ルート関節の回転は pose.root_ori に格納されている
+					rot_mat = pose.root_ori;
+				}
+				else {
+					// 子関節のインデックス補正
+					int simple_joint_index = joint->index - 1;
+
+					if (simple_joint_index >= 0 && simple_joint_index < deformed_motion->body->num_joints) {
+						rot_mat = pose.joint_rotations[simple_joint_index];
+					}
+					else {
+						rot_mat.setIdentity();
+					}
+				}
+
 				double rx, ry, rz;
 				Quat4f q;
-				q.set(pose.joint_rotations[joint_index]);
+				q.set(rot_mat);
 
 				// オイラー角に変換 (YXZ順)
 				QuatToEulerYXZ(q, ry, rx, rz);
