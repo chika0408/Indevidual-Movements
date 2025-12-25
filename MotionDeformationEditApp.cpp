@@ -521,10 +521,24 @@ void  MotionDeformationEditApp::Keyboard( unsigned char key, int mx, int my )
 		Start();
 
 	// o キーで変形後の動作を保存
-	if ( key == 'o' )
+	if (key == 'o')
 	{
+		// 元のファイル名から拡張子を除き、_deformed を付与する
+
+		string output_file_name = current_file_name;
+		// 最後の "." (ドット) の位置を探す
+		size_t extension_pos = output_file_name.rfind('.');
+
+		if (extension_pos != string::npos) {
+			// 拡張子の直前に文字列を挿入 (例: "test.bvh" -> "test_deformed.bvh")
+			output_file_name.insert(extension_pos, "_deformed");
+		}
+		else {
+			// 拡張子がない場合 (例: "test" -> "test_deformed")
+			output_file_name += "_deformed";
+		}
 		// 変形後の動作をBVH動作ファイルとして保存
-		//SaveDeformedMotionAsBVH( "deformed_motion.bvh" );
+		SaveDeformedMotionAsBVH(output_file_name.c_str());
 	}
 }
 

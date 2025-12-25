@@ -164,12 +164,12 @@ void  MotionDeformationApp::Initialize()
 	// フリレベル・キレレベルの設定
 	furi[0] = 1.0f;
 	furi[1] = 1.0f;
-	furi[2] = 1.0f;
-	furi[3] = 1.0f;
+	furi[2] = 10.0f;
+	furi[3] = 10.0f;
 	furi[4] = 1.0f;
-	furi[5] = 20.0f;
-	furi[6] = 20.0f;
-	kire = 0.9f;
+	furi[5] = 1.0f;
+	furi[6] = 1.0f;
+	kire = 1.1f;
 
 	// 編集中のレベルの設定
 	selected_param = 0;
@@ -458,8 +458,22 @@ void  MotionDeformationApp::Keyboard( unsigned char key, int mx, int my )
 	// o キーで変形後の動作を保存
 	if ( key == 'o' )
 	{
+		// 元のファイル名から拡張子を除き、_deformed を付与する
+
+		string output_file_name = current_file_name;
+		// 最後の "." (ドット) の位置を探す
+		size_t extension_pos = output_file_name.rfind('.');
+
+		if (extension_pos != string::npos) {
+			// 拡張子の直前に文字列を挿入 (例: "test.bvh" -> "test_deformed.bvh")
+			output_file_name.insert(extension_pos, "_deformed");
+		}
+		else {
+			// 拡張子がない場合 (例: "test" -> "test_deformed")
+			output_file_name += "_deformed";
+		}
 		// 変形後の動作をBVH動作ファイルとして保存
-		//SaveDeformedMotionAsBVH( "deformed_motion.bvh" );
+		SaveDeformedMotionAsBVH( output_file_name.c_str() );
 	}
 }
 
@@ -620,7 +634,7 @@ void  MotionDeformationApp::InitMotion( int no )
 		//LoadBVH("radio_middle_2_Char00.bvh"); //4
 
 		//LoadBVH("pointshort_Char00.bvh");
-		LoadBVH("radio_new_4_Char00.bvh");
+		LoadBVH("radio_long_4_Char00_deformed.bvh");
 		LoadSecondBVH("radio_long_4_Char00.bvh");
 
 		//LoadSecondBVH("steplong_Char00.bvh");
@@ -632,9 +646,9 @@ void  MotionDeformationApp::InitMotion( int no )
 	}
 
 	// 以下、他のテストケースを追加する
-	else if ( no == 1 )
+	/*else if ( no == 1 )
 	{
-	}
+	}*/
 }
 
 //
@@ -710,6 +724,9 @@ void  MotionDeformationApp::InitTimeline( Timeline * timeline, const Motion & mo
 //
 void  MotionDeformationApp::LoadBVH( const char * file_name )
 {
+	// ファイル名を記憶
+	current_file_name = file_name;
+
 	// BVHファイルを読み込んで動作データ（＋骨格モデル）を生成
 	Motion *  new_motion = LoadAndCoustructBVHMotion( file_name );
 
@@ -772,116 +789,143 @@ void  MotionDeformationApp::LoadSecondBVH(const char* file_name)
 
 void MotionDeformationApp::GetCumulativeOffset(float current_time, Vector3f& out_pos_offset, Quat4f& out_rot_offset)
 {
-	// 1. パラメータ変更の検知
+	// パラメータ変更の検知
+	// スライダー操作などで「動作の大きさ(furi)」が変わった場合のみ、
+	// 過去の軌道も再計算する必要があります。
 	bool is_param_changed = false;
 	for (int i = 0; i < 7; i++) {
 		// 浮動小数の誤差を考慮して比較
 		if (fabs(prev_furi[i] - furi[i]) > 0.001f) {
 			is_param_changed = true;
-			prev_furi[i] = furi[i]; // 現在の値を保存
+			prev_furi[i] = furi[i]; // 現在の値を保存して更新
 		}
 	}
 
-	// パラメータが変わった場合（スライダー操作時など）はキャッシュをクリアして再計算させる
+	// パラメータが変わった場合はキャッシュをクリアし、全区間を再計算させる
 	if (is_param_changed) {
 		cached_segment_pos_offsets.clear();
 		cached_segment_rot_offsets.clear();
 	}
 
-	// 2. オフセットの計算と蓄積
-	out_pos_offset.set(0.0f, 0.0f, 0.0f);
-	out_rot_offset.set(0.0f, 0.0f, 0.0f, 1.0f); // 単位クォータニオン
+	// オフセットの計算と蓄積
+	// 出力用変数の初期化
+	out_pos_offset.set(0.0f, 0.0f, 0.0f);       // 位置オフセットは(0,0,0)
+	out_rot_offset.set(0.0f, 0.0f, 0.0f, 1.0f); // 回転オフセットは単位クォータニオン(回転なし)
 
-	int segment_count = 0; // 処理したセグメント数
+	int segment_count = 0; // 処理済みの動作区間数をカウント
 
-	// distanceinfoを走査して動作区間（セグメント）を確認
+	// distanceinfo（全フレームの動き情報）を走査して、動作の区切りを見つける
 	for (int i = 0; i < (int)distanceinfo.size() - 1; i++)
 	{
-		// 動作の開始点 (0 -> 1) を検出
+		// 動作の開始点 (movecheck: 0 -> 1) を検出
 		if (distanceinfo[i].movecheck == 0 && distanceinfo[i + 1].movecheck == 1)
 		{
+			// この動作区間の開始フレーム
 			int start_frame = i + 1;
-			int end_frame = (int)distanceinfo.size() - 1;
 
-			// 動作の終了点 (1 -> 0) を検索
-			for (int j = start_frame; j < (int)distanceinfo.size() - 1; j++)
-			{
-				if (distanceinfo[j].movecheck == 1 && distanceinfo[j + 1].movecheck == 0)
-				{
-					end_frame = j;
+			// 区間終了の探索（停止期間も含めて「次の動作の開始」までを1区間とする）
+			// まず、現在の動作が止まる地点 (1 -> 0) を探す
+			int current_move_end = start_frame;
+			for (int j = start_frame; j < (int)distanceinfo.size() - 1; j++) {
+				if (distanceinfo[j].movecheck == 1 && distanceinfo[j + 1].movecheck == 0) {
+					current_move_end = j;
 					break;
 				}
 			}
 
-			float segment_end_time = end_frame * motion->interval;
-
-			// このセグメントが「完全に過去」である場合のみ累積に加算する
-			if (current_time > segment_end_time)
+			// 次に、そこから再び動作が始まる地点 (0 -> 1) を探す
+			int next_start_frame = (int)distanceinfo.size(); // 見つからなければ最後まで
+			bool found_next = false;
+			for (int j = current_move_end; j < (int)distanceinfo.size() - 1; j++)
 			{
-				// キャッシュの利用確認
+				if (distanceinfo[j].movecheck == 0 && distanceinfo[j + 1].movecheck == 1)
+				{
+					next_start_frame = j + 1;
+					found_next = true;
+					break;
+				}
+			}
+
+			// この区間の終了時刻（＝次の動作の開始時刻）
+			float next_start_time = next_start_frame * motion->interval;
+
+			// 累積への加算判定
+			// 現在時刻が「次の動作の開始時刻」を過ぎている場合、
+			// この区間（今の動作＋停止時間）は完了した「過去の動作」とみなせるため、オフセットを加算する。
+			if (current_time >= next_start_time)
+			{
+				// キャッシュにこの区間のデータが既に存在するか確認
 				if (segment_count < (int)cached_segment_pos_offsets.size())
 				{
-					// 【高速化】キャッシュ済みなら値を加算するだけ
+					// [高速化] 計算済みならキャッシュから値を足すだけ
+
+					// 位置の累積
 					out_pos_offset = out_pos_offset + cached_segment_pos_offsets[segment_count];
 
+					// 回転の累積 (現在の累積回転 * 今回の回転オフセット)
 					Quat4f temp = out_rot_offset;
-					out_rot_offset.mul(cached_segment_rot_offsets[segment_count], temp);
+					out_rot_offset.mul(temp, cached_segment_rot_offsets[segment_count]);
 				}
 				else
 				{
-					// 【計算】キャッシュがない場合のみ、IKを含む重い計算を行う
+					// [計算] キャッシュがない場合のみ、重いIK計算を行う
 
-					// セグメントの中間地点を計算用時刻とする
-					float mid_time = (start_frame * motion->interval + segment_end_time) / 2.0f;
+					// パラメータ計算のための基準時刻を設定
+					// (区間内の確実に動いている時刻を指定することで、正しく動作パラメータを取得させる)
+					float calc_time = start_frame * motion->interval;
 
+					// その時刻における変形パラメータを取得 (IK計算などが走る)
 					MotionWarpingParam seg_param;
-					// 現在のfuriレベルを使って変形パラメータを計算
-					InitDeformationParameter(mid_time, distanceinfo, seg_param, timewarp_deformation, *motion, furi);
+					InitDeformationParameter(calc_time, distanceinfo, seg_param, timewarp_deformation, *motion, furi);
 
-					// 変形による位置の差分 (変形後 - 変形前)
+					// --- 位置の差分計算 (変形後 - 変形前) ---
 					Vector3f pos_diff = seg_param.key_pose.root_pos - seg_param.org_pose.root_pos;
 
-					// 変形による回転の差分 (Diff = Modified * Original^-1)
-					// 行列を直接扱わず、クォータニオンに変換して計算
+					// --- 回転の差分計算 (変形後 * 変形前の逆回転) ---
+					// Matrix3f同士の演算ができないため、Quat4fに変換して計算
 					Quat4f q_key, q_org;
-					q_key.set(seg_param.key_pose.root_ori); // 行列からセット
-					q_org.set(seg_param.org_pose.root_ori); // 行列からセット
+					q_key.set(seg_param.key_pose.root_ori); // 行列 -> Quat
+					q_org.set(seg_param.org_pose.root_ori); // 行列 -> Quat
 
-					// orgの逆回転（共役クォータニオン）を作成
+					// 元の姿勢の逆回転（共役クォータニオン）を作成
 					Quat4f q_org_inv;
 					q_org_inv.x = -q_org.x;
 					q_org_inv.y = -q_org.y;
 					q_org_inv.z = -q_org.z;
 					q_org_inv.w = q_org.w;
 
-					// 差分回転 = Key * Org^-1
+					// 差分回転 = KeyRot * OrgRot^-1
 					Quat4f rot_diff;
 					rot_diff.mul(q_key, q_org_inv);
 
-					// 計算結果をキャッシュに保存
+					// --- 計算結果をキャッシュに保存 ---
 					cached_segment_pos_offsets.push_back(pos_diff);
 					cached_segment_rot_offsets.push_back(rot_diff);
 
-					// 結果を加算
+					// --- 結果を累積に加算 ---
 					out_pos_offset = out_pos_offset + pos_diff;
+
 					Quat4f temp = out_rot_offset;
-					out_rot_offset.mul(rot_diff, temp);
+					out_rot_offset.mul(temp, rot_diff);
 				}
 
-				segment_count++; // 完了したセグメント数をカウント
+				segment_count++; // 処理完了した区間数をインクリメント
 			}
 			else
 			{
-				// 現在進行中または未来のセグメントなので、これ以上過去の累積はない
+				// まだ次の動作が始まっていない（現在動作中、またはその後の停止中）なら、
+				// この区間は「現在進行中」なので累積（過去分）には含めない。
+				// (現在進行中の変形は ApplyMotionDeformation でリアルタイムに処理される)
 				break;
 			}
 
-			// 次の探索位置へ
-			i = end_frame;
+			// 次のループ探索位置を更新 (次の動作の開始地点の手前へ)
+			// ループ末尾で i++ されるため -1 しておく
+			i = next_start_frame - 1;
 		}
 	}
-
-	// 巻き戻し再生やリセット対応：もしキャッシュが実際の進行より多ければ（未来の分があれば）削除する
+	// キャッシュの整理
+	// 時間が巻き戻ったりリセットされた場合、未来のキャッシュが残っている可能性があるので削除する
 	if (segment_count < (int)cached_segment_pos_offsets.size()) {
 		cached_segment_pos_offsets.resize(segment_count);
 		cached_segment_rot_offsets.resize(segment_count);
@@ -891,20 +935,90 @@ void MotionDeformationApp::GetCumulativeOffset(float current_time, Vector3f& out
 //
 //  変形後の動作をBVH動作ファイルとして保存
 //
-/*
+
 void  MotionDeformationApp::SaveDeformedMotionAsBVH( const char * file_name )
 {
-	// 動作変形適用後の動作を生成
-	Motion *  deformed_motion = GenerateDeformedMotion( deformation, *motion );
+	// 変形後の動作データを生成
+	Motion* deformed_motion = GenerateDeformedMotion(deformation, *motion, distanceinfo, kire, furi);
+	if (!deformed_motion) return;
 
-	// 動作変形適用後の動作を保存
-	// ※省略（各自作成）
+	// テンプレートとなるBVHファイルを読み込む
+	BVH template_bvh( current_file_name.c_str() );
 
+	if (!template_bvh.IsLoadSuccess()) {
+		printf("Error: Template BVH (radio_long_3_Char00.bvh) load failed.\n");
+		delete deformed_motion;
+		return;
+	}
 
-	// 変形適用後の動作を削除
-	delete  deformed_motion;
+	int num_frames = deformed_motion->num_frames;
+	int num_channels = template_bvh.GetNumChannel();
+	double* data = new double[num_frames * num_channels];
+
+	// 全フレームループ
+	for (int f = 0; f < num_frames; f++) {
+		Posture* p = &deformed_motion->frames[f];
+
+		// 全関節ループ (テンプレートBVHの順序に従う)
+		for (int j = 0; j < template_bvh.GetNumJoint(); j++) {
+			const BVH::Joint* bj = template_bvh.GetJoint(j);
+
+			Matrix3f rot_mat;
+			Vector3f root_pos;
+
+			// --- 修正ポイント: 名前で関節を探す ---
+			if (j == 0) {
+				// ルート関節 (常にPoseのルート情報を使用)
+				rot_mat = p->root_ori;
+				root_pos = p->root_pos;
+				root_pos.scale(100.0f); // m -> cm
+			}
+			else {
+				// 子関節: 名前を使ってSimpleHuman側のインデックスを検索
+				int target_index = FindSegment(deformed_motion->body, bj->name.c_str());
+
+				if (target_index >= 0) {
+					// 名前が一致する関節が見つかった -> その回転データを使う
+					rot_mat = p->joint_rotations[target_index];
+				}
+				else {
+					// 見つからない -> 回転なし (単位行列)
+					rot_mat.setIdentity();
+					// 必要であればデバッグ用にログを出す
+					// printf("Warning: Joint '%s' not found in motion data.\n", bj->name.c_str());
+				}
+			}
+
+			// 行列を転置する
+			rot_mat.transpose();
+
+			// 回転行列をYXZオイラー角に変換
+			float angles[3];
+			GetEulerAngles(rot_mat, angles);
+
+			// チャンネルに値をセット (6チャンネル構成: Xpos, Ypos, Zpos, Yrot, Xrot, Zrot を想定)
+			for (auto c : bj->channels) {
+				int flat_idx = f * num_channels + c->index;
+
+				if (c->type == BVH::X_POSITION) data[flat_idx] = (j == 0) ? root_pos.x : 0.0;
+				else if (c->type == BVH::Y_POSITION) data[flat_idx] = (j == 0) ? root_pos.y : 0.0;
+				else if (c->type == BVH::Z_POSITION) data[flat_idx] = (j == 0) ? root_pos.z : 0.0;
+				else if (c->type == BVH::X_ROTATION) data[flat_idx] = angles[0];
+				else if (c->type == BVH::Y_ROTATION) data[flat_idx] = angles[1];
+				else if (c->type == BVH::Z_ROTATION) data[flat_idx] = angles[2];
+			}
+		}
+	}
+
+	// 保存実行
+	template_bvh.SetMotion(num_frames, deformed_motion->interval, data);
+	template_bvh.Save(file_name);
+
+	delete[] data;
+	delete deformed_motion;
+	printf("Saved deformed motion to: %s\n", file_name);
 }
-*/
+
 
 //
 // 末端部位の移動距離の合計の情報の初期化
@@ -2014,26 +2128,73 @@ void UpdateKeyposeByVelocity(MotionWarpingParam& param, Motion& motion, float fu
 	delete human_body;
 }
 
+//
+//	回転行列からオイラー角への変換
+//
+void GetEulerAngles(const Matrix3f& R, float* out_angles)
+{
+	const float PI = 3.14159265358979323846f;
+	float x, y, z;
+
+	// Y -> X -> Z 順 (R = Ry * Rx * Rz)
+	// m12 = -sin(x)
+	x = asin(-R.m12);
+	if (cos(x) != 0) {
+		// m02 = sin(y)cos(x), m22 = cos(y)cos(x)
+		y = atan2(R.m02, R.m22);
+		// m10 = cos(x)sin(z), m11 = cos(x)cos(z)
+		z = atan2(R.m10, R.m11);
+	}
+	else {
+		// ジンバルロック
+		y = atan2(-R.m20, R.m00);
+		z = 0.0f;
+	}
+
+	// ラジアン -> 度数
+	out_angles[0] = x * 180.0f / PI; // X
+	out_angles[1] = y * 180.0f / PI; // Y
+	out_angles[2] = z * 180.0f / PI; // Z
+}
+
+
 
 //
 //  動作変形（動作ワーピング）の適用後の動作を生成
 //
-/*
-Motion *  GenerateDeformedMotion( const MotionWarpingParam & deform, const Motion & motion )
+
+Motion *  GenerateDeformedMotion( const MotionWarpingParam & deform, const Motion & motion, const vector<DistanceParam>& distance, float kire, float* furi)
 {
 	Motion *  deformed = NULL;
 
 	// 動作変形前の動作を生成
 	deformed = new Motion( motion );
 
-	// 各フレームの姿勢を変形
-	for ( int i = 0; i < motion.num_frames; i++ )
-		ApplyMotionDeformation( motion.interval * i, deform, motion.frames[ i ], deformed->frames[ i ] );
+	// 計算用変数
+	TimeWarpingParam current_time_param;
+	MotionWarpingParam current_motion_param = deform; // 初期値として引数を使用
+	float current_before_time = 0.0f;
+	Posture temp_posture(motion.body);
 
+	// 各フレームの姿勢を変形
+	for (int i = 0; i < motion.num_frames; i++)
+	{
+		float t = motion.interval * i;
+
+		// パラメータを現在時刻 t に合わせて更新 (Animation関数内の処理を再現)
+		InitTimeDeformationParameter(t, const_cast<vector<DistanceParam>&>(distance), current_time_param, const_cast<Motion&>(motion), kire);
+		InitDeformationParameter(t, const_cast<vector<DistanceParam>&>(distance), current_motion_param, current_time_param, const_cast<Motion&>(motion), furi);
+
+		// タイムワーピング適用後の姿勢を計算
+		ApplyTimeWarping(t, current_time_param, motion, current_before_time, temp_posture);
+
+		// モーションワーピングを適用し、結果を deformed->frames[i] に格納
+		ApplyMotionDeformation(t, current_motion_param, const_cast<Motion&>(motion), temp_posture, current_time_param, deformed->frames[i]);
+	}
 	// 動作変形後の動作を返す
 	return  deformed;
 }
-*/
+
 
 
 //

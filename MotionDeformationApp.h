@@ -133,6 +133,9 @@ class  MotionDeformationApp : public InverseKinematicsCCDApp
 	// 【追加】累積オフセット計算関数の宣言
 	void GetCumulativeOffset(float current_time, Vector3f& out_pos_offset, Quat4f& out_rot_offset);
 
+	// 現在読み込んでいるBVHファイル名
+	string current_file_name;
+
 
   protected:
 	// 動作再生のための変数
@@ -301,8 +304,11 @@ void UpdateKeyposeByPosition(MotionWarpingParam& param, Motion& motion, float fu
 // モーションワーピング後のキー姿勢を関節角度の回転速度の変更により更新
 void UpdateKeyposeByVelocity(MotionWarpingParam& param, Motion& motion, float furi[]);
 
+//	回転行列からオイラー角への変換
+void GetEulerAngles(const Matrix3f& R, float* out_angles);
+
 // 動作変形（動作ワーピング）の適用後の動作を生成
-Motion *  GenerateDeformedMotion( const MotionWarpingParam & deform, const Motion & motion );
+Motion *  GenerateDeformedMotion( const MotionWarpingParam & deform, const Motion & motion , const vector<DistanceParam>& distance, float kire, float* furi);
 
 // 動作変形（動作ワーピング）の適用後の姿勢の計算
 float  ApplyMotionDeformation( float time, const MotionWarpingParam & deform, Motion& motion, Posture & input_pose, TimeWarpingParam time_param, Posture & output_pose );
