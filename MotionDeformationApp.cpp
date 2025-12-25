@@ -634,7 +634,7 @@ void  MotionDeformationApp::InitMotion( int no )
 		//LoadBVH("radio_middle_2_Char00.bvh"); //4
 
 		//LoadBVH("pointshort_Char00.bvh");
-		LoadBVH("radio_long_4_Char00_deformed.bvh");
+		LoadBVH("radio_long_4_Char00.bvh");
 		LoadSecondBVH("radio_long_4_Char00.bvh");
 
 		//LoadSecondBVH("steplong_Char00.bvh");
@@ -956,57 +956,52 @@ void  MotionDeformationApp::SaveDeformedMotionAsBVH( const char * file_name )
 	double* data = new double[num_frames * num_channels];
 
 	// 全フレームループ
-	for (int f = 0; f < num_frames; f++) {
-		Posture* p = &deformed_motion->frames[f];
+	for (int f = 0; f < num_frames; f++)
+	{
+		Posture& pose = deformed_motion->frames[f];
 
-		// 全関節ループ (テンプレートBVHの順序に従う)
-		for (int j = 0; j < template_bvh.GetNumJoint(); j++) {
-			const BVH::Joint* bj = template_bvh.GetJoint(j);
+		for (int c = 0; c < num_channels; c++)
+		{
+			const BVH::Channel* channel = template_bvh.GetChannel(c);
+			const BVH::Joint* joint = channel->joint;
+			int joint_index = joint->index; // SimpleHumanのJoint indexと一致すると仮定
 
-			Matrix3f rot_mat;
-			Vector3f root_pos;
+			double value = 0.0;
 
-			// --- 修正ポイント: 名前で関節を探す ---
-			if (j == 0) {
-				// ルート関節 (常にPoseのルート情報を使用)
-				rot_mat = p->root_ori;
-				root_pos = p->root_pos;
-				root_pos.scale(100.0f); // m -> cm
-			}
-			else {
-				// 子関節: 名前を使ってSimpleHuman側のインデックスを検索
-				int target_index = FindSegment(deformed_motion->body, bj->name.c_str());
-
-				if (target_index >= 0) {
-					// 名前が一致する関節が見つかった -> その回転データを使う
-					rot_mat = p->joint_rotations[target_index];
+			// 位置情報の書き出し
+			if (channel->type == BVH::X_POSITION ||
+				channel->type == BVH::Y_POSITION ||
+				channel->type == BVH::Z_POSITION)
+			{
+				if (joint->parent == NULL) {
+					// ルート関節は Posture の root_pos を使用
+					if (channel->type == BVH::X_POSITION) value = pose.root_pos.x / 0.01; // cm -> m 逆変換(bvh_scaleが0.01の場合)
+					if (channel->type == BVH::Y_POSITION) value = pose.root_pos.y / 0.01;
+					if (channel->type == BVH::Z_POSITION) value = pose.root_pos.z / 0.01;
 				}
 				else {
-					// 見つからない -> 回転なし (単位行列)
-					rot_mat.setIdentity();
-					// 必要であればデバッグ用にログを出す
-					// printf("Warning: Joint '%s' not found in motion data.\n", bj->name.c_str());
+					// 子関節は OFFSET（骨の長さ）を使用することで潰れるのを防ぐ
+					if (channel->type == BVH::X_POSITION) value = joint->offset[0];
+					if (channel->type == BVH::Y_POSITION) value = joint->offset[1];
+					if (channel->type == BVH::Z_POSITION) value = joint->offset[2];
 				}
 			}
+			// 回転情報の書き出し
+			else
+			{
+				double rx, ry, rz;
+				Quat4f q;
+				q.set(pose.joint_rotations[joint_index]);
 
-			// 行列を転置する
-			rot_mat.transpose();
+				// オイラー角に変換 (YXZ順)
+				QuatToEulerYXZ(q, ry, rx, rz);
 
-			// 回転行列をYXZオイラー角に変換
-			float angles[3];
-			GetEulerAngles(rot_mat, angles);
-
-			// チャンネルに値をセット (6チャンネル構成: Xpos, Ypos, Zpos, Yrot, Xrot, Zrot を想定)
-			for (auto c : bj->channels) {
-				int flat_idx = f * num_channels + c->index;
-
-				if (c->type == BVH::X_POSITION) data[flat_idx] = (j == 0) ? root_pos.x : 0.0;
-				else if (c->type == BVH::Y_POSITION) data[flat_idx] = (j == 0) ? root_pos.y : 0.0;
-				else if (c->type == BVH::Z_POSITION) data[flat_idx] = (j == 0) ? root_pos.z : 0.0;
-				else if (c->type == BVH::X_ROTATION) data[flat_idx] = angles[0];
-				else if (c->type == BVH::Y_ROTATION) data[flat_idx] = angles[1];
-				else if (c->type == BVH::Z_ROTATION) data[flat_idx] = angles[2];
+				if (channel->type == BVH::X_ROTATION) value = rx;
+				if (channel->type == BVH::Y_ROTATION) value = ry;
+				if (channel->type == BVH::Z_ROTATION) value = rz;
 			}
+
+			data[f * num_channels + c] = value;
 		}
 	}
 
@@ -1016,7 +1011,6 @@ void  MotionDeformationApp::SaveDeformedMotionAsBVH( const char * file_name )
 
 	delete[] data;
 	delete deformed_motion;
-	printf("Saved deformed motion to: %s\n", file_name);
 }
 
 
@@ -2131,30 +2125,39 @@ void UpdateKeyposeByVelocity(MotionWarpingParam& param, Motion& motion, float fu
 //
 //	回転行列からオイラー角への変換
 //
-void GetEulerAngles(const Matrix3f& R, float* out_angles)
+void QuatToEulerYXZ(const Quat4f& q, double& y, double& x, double& z)
 {
-	const float PI = 3.14159265358979323846f;
-	float x, y, z;
+	// クォータニオンから回転行列へ変換
+	Matrix3f mat;
+	mat.set(q); // SimpleHuman.cpp 926行目付近の使用法に基づく
 
-	// Y -> X -> Z 順 (R = Ry * Rx * Rz)
+	// 回転行列からオイラー角(YXZ順)を抽出
+	// R = Ry * Rx * Rz
+	//     | CyCz+SySxSz   CzSxSy-CySz   CxSy |   | m00 m01 m02 |
+	// R = | CxSz          CxCz          -Sx  | = | m10 m11 m12 |
+	//     | CySxSz-CzSy   CyCzSx+SySz   CxCy |   | m20 m21 m22 |
+
 	// m12 = -sin(x)
-	x = asin(-R.m12);
+	x = asin(-mat.m12);
+
+	// cos(x) が 0 でない場合 (ジンバルロックしていない場合)
 	if (cos(x) != 0) {
-		// m02 = sin(y)cos(x), m22 = cos(y)cos(x)
-		y = atan2(R.m02, R.m22);
-		// m10 = cos(x)sin(z), m11 = cos(x)cos(z)
-		z = atan2(R.m10, R.m11);
+		// m02 = cos(x)sin(y), m22 = cos(x)cos(y) -> tan(y) = m02/m22
+		y = atan2(mat.m02, mat.m22);
+
+		// m10 = cos(x)sin(z), m11 = cos(x)cos(z) -> tan(z) = m10/m11
+		z = atan2(mat.m10, mat.m11);
 	}
 	else {
-		// ジンバルロック
-		y = atan2(-R.m20, R.m00);
-		z = 0.0f;
+		// ジンバルロック時の処理 (x = +/- 90度)
+		y = atan2(-mat.m20, mat.m00);
+		z = 0;
 	}
 
-	// ラジアン -> 度数
-	out_angles[0] = x * 180.0f / PI; // X
-	out_angles[1] = y * 180.0f / PI; // Y
-	out_angles[2] = z * 180.0f / PI; // Z
+	// ラジアンから度数法へ変換
+	x = x * 180.0 / M_PI;
+	y = y * 180.0 / M_PI;
+	z = z * 180.0 / M_PI;
 }
 
 

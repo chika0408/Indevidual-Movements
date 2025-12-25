@@ -305,7 +305,7 @@ void UpdateKeyposeByPosition(MotionWarpingParam& param, Motion& motion, float fu
 void UpdateKeyposeByVelocity(MotionWarpingParam& param, Motion& motion, float furi[]);
 
 //	回転行列からオイラー角への変換
-void GetEulerAngles(const Matrix3f& R, float* out_angles);
+void QuatToEulerYXZ(const Quat4f& q, double& y, double& x, double& z);
 
 // 動作変形（動作ワーピング）の適用後の動作を生成
 Motion *  GenerateDeformedMotion( const MotionWarpingParam & deform, const Motion & motion , const vector<DistanceParam>& distance, float kire, float* furi);
