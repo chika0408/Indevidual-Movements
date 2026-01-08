@@ -540,6 +540,28 @@ void  MotionDeformationEditApp::Keyboard( unsigned char key, int mx, int my )
 		// 変形後の動作をBVH動作ファイルとして保存
 		SaveDeformedMotionAsBVH(output_file_name.c_str());
 	}
+
+	std::ofstream outputfile("dataset.csv", std::ios::app);
+
+	if (!outputfile.is_open()) {
+		printf("Error: Could not open for writing.\n");
+	}
+
+	// 入力書き込み処理
+	outputfile << kire << "," << furi[0] << ","
+		<< model_param.right_foot_dist << ","
+		<< model_param.left_foot_dist << ","
+		<< model_param.right_hand_dist << ","
+		<< model_param.left_hand_dist << ","
+		<< model_param.head_dist << ","
+		<< model_param.ChestVal << ",";
+
+	outputfile << kire << ",";
+	for (int i = 0; i < 7; i++) {
+		outputfile << furi[i] << (i == 6 ? "" : ",");
+	}
+	outputfile << "\n";
+	outputfile.close();
 }
 
 
