@@ -417,7 +417,14 @@ void  MotionDeformationEditApp::Keyboard( unsigned char key, int mx, int my )
 	//  レベルの増減 ( [ キーで減少、 ] キーで増加 )
 	if (key == '[' || key == ']')
 	{
-		float delta = (key == ']') ? 1.0f : -1.0f; // 変化量
+		// Shiftキーなどの修飾キーが押されている状態を取得する
+		int mod = glutGetModifiers();
+
+		// Shiftキーが押されていれば0.1、そうでなければ1.0を変化量とする
+		float step = (mod & GLUT_ACTIVE_SHIFT) ? 0.1f : 1.0f;
+
+		// 変化量が+か-かを判別する
+		float delta = (key == ']') ? step : -step;
 
 		if (selected_param == 7) // キレレベル
 		{
@@ -514,6 +521,23 @@ void  MotionDeformationEditApp::Keyboard( unsigned char key, int mx, int my )
 		// v キーで関節点の描画の有無を変更
 		if ( key == 'v' )
 			draw_joints = !draw_joints;
+	}
+
+	// kキーでキレ・フリの度合いの入力
+	if (key == 'k') {
+		// アニメーションを停止
+		on_animation = false;
+
+		if (selected_param == 7) { // キレの選択中
+			// ポップアップ（コンソール注視）で入力を促す
+			kire = ShowPopupInput("Kire Setting", "Enter new Kire value:", input_kire);
+		}
+		else if (selected_param >= 0 && selected_param < 7) { // 各部位のフリの選択中
+			const char* names[] = { "R_Foot", "L_Foot", "R_Hand", "L_Hand", "Hips", "Chest", "Head" };
+			furi[selected_param] = ShowPopupInput("Furi Setting", names[selected_param], input_furi);
+		}
+
+		std::cout << ">> Updated! Press 's' to resume." << std::endl;
 	}
 
 	// r キーで姿勢をリセット

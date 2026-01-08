@@ -4,13 +4,13 @@ import sys
 import os
 
 # データセットの確認
-if not os.path.exists('dataset.csv'):
-    print("Error: dataset.csv が見つかりません。")
+if not os.path.exists('dataset_all.csv'):
+    print("Error: dataset_all.csv が見つかりません。")
     # ファイルがない場合は空のファイルを作るか、エラーで終了
     sys.exit(1)
 
 # データの読み込み
-df = pd.read_csv('dataset.csv', header=None)
+df = pd.read_csv('dataset_all.csv', header=None)
 
 # カラム名を設定 
 # 0:入力キレ, 1:入力大きさ, 3~7:末端部位の移動距離の平均, 8:ねじれ平均, 9:正解kire, 10~16:正解furi[0]~[6]

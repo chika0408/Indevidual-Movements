@@ -278,6 +278,9 @@ class  MotionDeformationApp : public InverseKinematicsCCDApp
 
 float CalcChestVal(const Motion* motion);
 
+// Windowsの標準機能を使って、入力ダイアログを表示する
+float ShowPopupInput(const char* title, const char* prompt, float current_val);
+
 
 //
 // 末端部位の移動距離の合計を求める処理
@@ -287,10 +290,7 @@ float CalcChestVal(const Motion* motion);
 void InitDistanceParameter(vector<DistanceParam> & param);
 
 // 末端部位の移動距離を測定
-void CheckDistance(const Motion& motion, vector<DistanceParam> & param, ModelParam m_param, const char ** segment_names = NULL);
-
-// 応急処置
-int Getseg(int i);
+void CheckDistance(const Motion& motion, vector<DistanceParam> & param, ModelParam& m_param, const char ** segment_names = NULL);
 
 //
 //  動作変形情報にもとづく動作変形処理（タイムワーピング）

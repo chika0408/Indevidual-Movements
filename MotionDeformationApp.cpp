@@ -28,6 +28,11 @@
 #include <numeric> // std::accumulate用
 #include <cmath>   // std::pow用
 
+// windowsの機能利用のため
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 //
 //  コンストラクタ
 //
@@ -164,12 +169,15 @@ void  MotionDeformationApp::Initialize()
 	// フリレベル・キレレベルの設定
 	furi[0] = 1.0f;
 	furi[1] = 1.0f;
-	furi[2] = 10.0f;
-	furi[3] = 10.0f;
+	furi[2] = 1.0f;
+	furi[3] = 1.0f;
 	furi[4] = 1.0f;
 	furi[5] = 1.0f;
 	furi[6] = 1.0f;
-	kire = 1.1f;
+	kire = 1.0f;
+
+	input_furi = 0.0f;
+	input_kire = 0.0f;
 
 	// 編集中のレベルの設定
 	selected_param = 0;
@@ -408,7 +416,14 @@ void  MotionDeformationApp::Keyboard( unsigned char key, int mx, int my )
 	//  レベルの増減 ( [ キーで減少、 ] キーで増加 )
 	if (key == '[' || key == ']')
 	{
-		float delta = (key == ']') ? 1.0f : -1.0f; // 変化量
+		// Shiftキーなどの修飾キーが押されている状態を取得する
+		int mod = glutGetModifiers();
+
+		// Shiftキーが押されていれば0.1、そうでなければ1.0を変化量とする
+		float step = (mod & GLUT_ACTIVE_SHIFT) ? 0.1f : 1.0f;
+
+		// 変化量が+か-かを判別する
+		float delta = (key == ']') ? step : -step; 
 
 		if (selected_param == 7) // キレレベル
 		{
@@ -475,6 +490,23 @@ void  MotionDeformationApp::Keyboard( unsigned char key, int mx, int my )
 	// jキーで再生速度を下げる
 	if (key == 'j')
 		animation_speed -= 0.1f;
+
+	// kキーでキレ・フリの度合いの入力
+	if (key == 'k') {
+		// アニメーションを停止
+		on_animation = false;
+
+		if (selected_param == 7) { // キレの選択中
+			// ポップアップ（コンソール注視）で入力を促す
+			kire = ShowPopupInput("Kire Setting", "Enter new Kire value:", input_kire);
+		}
+		else if (selected_param >= 0 && selected_param < 7) { // 各部位のフリの選択中
+			const char* names[] = { "R_Foot", "L_Foot", "R_Hand", "L_Hand", "Hips", "Chest", "Head" };
+			furi[selected_param] = ShowPopupInput("Furi Setting", names[selected_param], input_furi);
+		}
+
+		std::cout << ">> Updated! Press 's' to resume." << std::endl;
+	}
 
 	// r キーでリセット
 	if ( key == 'r' )
@@ -681,7 +713,7 @@ void  MotionDeformationApp::InitMotion( int no )
 		//LoadBVH("radio_middle_2_Char00.bvh"); //4
 
 		//LoadBVH("pointshort_Char00.bvh");
-		LoadBVH("radio_long_4_Char00_deformed.bvh");
+		LoadBVH("radio_new_4_Char00.bvh");
 		LoadSecondBVH("radio_long_4_Char00.bvh");
 
 		//LoadSecondBVH("steplong_Char00.bvh");
@@ -1198,9 +1230,36 @@ float CalcChestVal(const Motion* motion)
 
 
 //
+// Windowsの標準機能を使って、入力ダイアログを表示する関数
+//
+float ShowPopupInput(const char* title, const char* prompt, float current_val) 
+{
+	char buffer[128];
+	sprintf(buffer, "%f", current_val); // 現在の値を初期値としてセット
+
+	// 本来は複雑なGUIプログラムが必要ですが、研究用プロトタイプとして
+	// 最も簡便な「コンソール入力をポップアップ風に見せる」方法を提案します
+	// (※完全に独自のウィンドウを作るのは数百行のコードが必要になるため)
+
+	std::cout << "--- " << title << " ---" << std::endl;
+	std::cout << prompt << " (Current: " << current_val << ")" << std::endl;
+	std::cout << ">> Please enter value in the console and press Enter." << std::endl;
+
+	// ウィンドウを前面に持ってくる命令（可能であれば）
+#ifdef _WIN32
+	SetForegroundWindow(GetConsoleWindow());
+#endif
+
+	float val;
+	std::cin >> val;
+	return val;
+}
+
+
+//
 // 末端部位の移動距離を測定
 //
-void CheckDistance(const Motion& motion, vector<DistanceParam> & param, ModelParam m_param, const char ** segment_names)
+void CheckDistance(const Motion& motion, vector<DistanceParam> & param, ModelParam& m_param, const char ** segment_names)
 {
 	// 骨格の追加情報を生成
 	// キャラクタの骨格情報
@@ -1254,6 +1313,8 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, ModelPar
 		float right_hand_dist = segment_positions[2].distance(before_segment_positions[2]);
 		float left_hand_dist = segment_positions[3].distance(before_segment_positions[3]);
 
+		float head_dist = segment_positions[6].distance(before_segment_positions[6]);
+
 		// 末端部位の移動距離の合計を計算
 		float total_dist = right_ankle_dist + left_ankle_dist + right_hand_dist + left_hand_dist;
 
@@ -1271,7 +1332,6 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, ModelPar
 		m_param.left_foot_dist += left_ankle_dist;
 		m_param.right_hand_dist += right_hand_dist;
 		m_param.left_hand_dist += left_hand_dist;
-		float head_dist = segment_positions[6].distance(before_segment_positions[6]);
 		m_param.head_dist += head_dist;
 
 		// 保存用変数
@@ -1295,10 +1355,10 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, ModelPar
 
 	// 統計モデルの情報を更新
 	m_param.right_foot_dist = m_param.right_foot_dist / motion.num_frames;
-	m_param.left_foot_dist += m_param.left_foot_dist / motion.num_frames;
-	m_param.right_hand_dist += m_param.right_hand_dist / motion.num_frames;
-	m_param.left_hand_dist += m_param.left_hand_dist / motion.num_frames;
-	m_param.head_dist += m_param.head_dist / motion.num_frames;
+	m_param.left_foot_dist = m_param.left_foot_dist / motion.num_frames;
+	m_param.right_hand_dist = m_param.right_hand_dist / motion.num_frames;
+	m_param.left_hand_dist = m_param.left_hand_dist / motion.num_frames;
+	m_param.head_dist = m_param.head_dist / motion.num_frames;
 
 	// 平滑化(前後10フレーム)
 	for (int i = 10; i < param.size() - 10; i++)
@@ -2090,11 +2150,20 @@ void UpdateKeyposeByPosition(MotionWarpingParam& param, Motion& motion, float fu
 		// フリレベルを倍率として移動距離を設定
 		move_vec = move_vec * furi[i];
 
+		//目標となる新たな位置を算出
 		Point3f ee_pos;
 		ee_pos = before_segment_positions[i];
 		ee_pos += move_vec;
 
-		ApplyInverseKinematicsCCD(param.key_pose, -1, seg_no, ee_pos);
+		if (i == SEG_PELVIS)
+		{
+			// 腰（ルート）の場合は、IKを使わずに直接ルート座標を更新する
+			param.key_pose.root_pos = ee_pos;
+		}
+		else
+		{
+			ApplyInverseKinematicsCCD(param.key_pose, -1, seg_no, ee_pos);
+		}
 	}
 	delete human_body;
 }
