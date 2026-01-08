@@ -108,7 +108,7 @@ void  MotionDeformationApp::Initialize()
 	primary_segment_names[SEG_HEAD] = "Neck";
 
 	// 末端部位の移動距離の合計をフレーム毎に配列として出力
-	CheckDistance(*motion, distanceinfo, primary_segment_names);
+	CheckDistance(*motion, distanceinfo, model_param, primary_segment_names);
 
 	// 確認のためにdistanceinfoをcsvファイルに書き出す
 	//std::ofstream outputfile("distanceinfo_output.csv");
@@ -175,10 +175,35 @@ void  MotionDeformationApp::Initialize()
 	selected_param = 0;
 
 	// ねじれの計算
-	double test1 = CalcChestVal(motion);
+	model_param.ChestVal = CalcChestVal(motion);
 
 	// 動作変形情報の初期化
 	//InitParameter();
+
+	//　Python学習と結果読み込み
+	//int ret = system("python train_model.py");
+	//if (ret == 0) {
+	//	std::ifstream infile("model_params.txt");
+	//	if (infile.is_open()) {
+	//		// kire: 重み8つ + 切片
+	//		infile >> model_param.params_kire[0] >> model_param.params_kire[1]
+	//			>> model_param.params_kire[2] >> model_param.params_kire[3]
+	//			>> model_param.params_kire[4] >> model_param.params_kire[5]
+	//			>> model_param.params_kire[6] >> model_param.params_kire[7]
+	//			>> model_param.params_kire[8];
+
+
+	//		// furi: 重み8つ + 切片
+	//		for (int i = 0; i < 7; i++) {
+	//			infile >> model_param.params_furi[i][0] >> model_param.params_furi[i][1]
+	//				>> model_param.params_furi[i][2] >> model_param.params_furi[i][3]
+	//				>> model_param.params_furi[i][4] >> model_param.params_furi[i][5]
+	//				>> model_param.params_furi[i][6] >> model_param.params_furi[i][7]
+	//				>> model_param.params_furi[i][8];
+	//		}
+	//		infile.close();
+	//	}
+	//}
 
 	// タイムライン描画機能の初期化
 	timeline = new Timeline();
@@ -474,6 +499,28 @@ void  MotionDeformationApp::Keyboard( unsigned char key, int mx, int my )
 		}
 		// 変形後の動作をBVH動作ファイルとして保存
 		SaveDeformedMotionAsBVH( output_file_name.c_str() );
+
+		std::ofstream outputfile("dataset.csv", std::ios::app);
+
+		if (!outputfile.is_open()) {
+			printf("Error: Could not open for writing.\n");
+		}
+
+		// 入力書き込み処理
+		outputfile << kire << "," << furi[0] << ","
+			<< model_param.right_foot_dist << ","
+			<< model_param.left_foot_dist << ","
+			<< model_param.right_hand_dist << ","
+			<< model_param.left_hand_dist << ","
+			<< model_param.head_dist << ","
+			<< model_param.ChestVal << ",";
+
+		outputfile << kire << ",";
+		for (int i = 0; i < 7; i++) {
+			outputfile << furi[i] << (i == 6 ? "" : ",");
+		}
+		outputfile << "\n";
+		outputfile.close();
 	}
 }
 
@@ -1034,6 +1081,36 @@ void  MotionDeformationApp::SaveDeformedMotionAsBVH( const char * file_name )
 
 
 //
+// 統計モデルを用いたパラメータの推定
+//
+void  MotionDeformationApp::EstimateParameters(float input_furi, float input_kire, ModelParam param)
+{
+	// キレの推定
+	kire = param.params_kire[0] * input_kire
+		+ param.params_kire[1] * input_furi
+		+ param.params_kire[2] * param.right_foot_dist
+		+ param.params_kire[3] * param.left_foot_dist
+		+ param.params_kire[4] * param.right_hand_dist
+		+ param.params_kire[5] * param.left_hand_dist
+		+ param.params_kire[6] * param.head_dist
+		+ param.params_kire[7] * param.ChestVal
+		+ param.params_kire[8];
+
+	// フリの推定
+	for (int i = 0; i < 7; i++) {
+		furi[i] = param.params_furi[i][0] * input_kire
+			+ param.params_furi[i][1] * input_furi
+			+ param.params_furi[i][2] * param.right_foot_dist
+			+ param.params_furi[i][3] * param.left_foot_dist
+			+ param.params_furi[i][4] * param.right_hand_dist
+			+ param.params_furi[i][5] * param.left_hand_dist
+			+ param.params_furi[i][6] * param.head_dist
+			+ param.params_furi[i][7] * param.ChestVal
+			+ param.params_furi[i][8];
+	}
+}
+
+//
 // 末端部位の移動距離の合計の情報の初期化
 //
 void InitDistanceParameter(vector<DistanceParam> & param)
@@ -1046,7 +1123,7 @@ void InitDistanceParameter(vector<DistanceParam> & param)
 // 肩を利用したねじれの計算
 //
 
-double CalcChestVal(const Motion* motion)
+float CalcChestVal(const Motion* motion)
 {
 	if (!motion) return 0.0;
 
@@ -1073,7 +1150,7 @@ double CalcChestVal(const Motion* motion)
 		if (rShldrIdx == -1 || lShldrIdx == -1) return 0.0;
 	}
 
-	std::vector<double> torsionValues;
+	std::vector<float> torsionValues;
 	torsionValues.reserve(motion->num_frames);
 
 	// 計算用の一時変数
@@ -1097,7 +1174,7 @@ double CalcChestVal(const Motion* motion)
 
 		// Z軸（奥行き）の差分を計算
 		// パンチ動作等は、片方の肩が前、もう片方が後ろに行くため、この値が大きく変動します
-		double zDiff = rPos.z - lPos.z;
+		float zDiff = rPos.z - lPos.z;
 
 		torsionValues.push_back(zDiff);
 	}
@@ -1106,15 +1183,15 @@ double CalcChestVal(const Motion* motion)
 	if (torsionValues.empty()) return 0.0;
 
 	// 平均値
-	double sum = std::accumulate(torsionValues.begin(), torsionValues.end(), 0.0);
-	double mean = sum / torsionValues.size();
+	float sum = std::accumulate(torsionValues.begin(), torsionValues.end(), 0.0);
+	float mean = sum / torsionValues.size();
 
 	// 分散
-	double sqSum = 0.0;
-	for (const double val : torsionValues) {
+	float sqSum = 0.0;
+	for (const float val : torsionValues) {
 		sqSum += std::pow(val - mean, 2);
 	}
-	double variance = sqSum / torsionValues.size();
+	float variance = sqSum / torsionValues.size();
 
 	return variance;
 }
@@ -1123,7 +1200,7 @@ double CalcChestVal(const Motion* motion)
 //
 // 末端部位の移動距離を測定
 //
-void CheckDistance(const Motion& motion, vector<DistanceParam> & param, const char ** segment_names)
+void CheckDistance(const Motion& motion, vector<DistanceParam> & param, ModelParam m_param, const char ** segment_names)
 {
 	// 骨格の追加情報を生成
 	// キャラクタの骨格情報
@@ -1190,6 +1267,13 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, const ch
 			}
 		}
 
+		m_param.right_foot_dist += right_ankle_dist;
+		m_param.left_foot_dist += left_ankle_dist;
+		m_param.right_hand_dist += right_hand_dist;
+		m_param.left_hand_dist += left_hand_dist;
+		float head_dist = segment_positions[6].distance(before_segment_positions[6]);
+		m_param.head_dist += head_dist;
+
 		// 保存用変数
 		DistanceParam d;
 
@@ -1208,6 +1292,13 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, const ch
 		// 現フレームの情報を格納する
 		param.push_back(d);
 	}
+
+	// 統計モデルの情報を更新
+	m_param.right_foot_dist = m_param.right_foot_dist / motion.num_frames;
+	m_param.left_foot_dist += m_param.left_foot_dist / motion.num_frames;
+	m_param.right_hand_dist += m_param.right_hand_dist / motion.num_frames;
+	m_param.left_hand_dist += m_param.left_hand_dist / motion.num_frames;
+	m_param.head_dist += m_param.head_dist / motion.num_frames;
 
 	// 平滑化(前後10フレーム)
 	for (int i = 10; i < param.size() - 10; i++)

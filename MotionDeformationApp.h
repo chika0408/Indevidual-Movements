@@ -83,6 +83,28 @@ struct  MotionWarpingParam
 	float        blend_out_duration;
 };
 
+
+//
+//　統計モデルの情報
+//
+struct  ModelParam
+{
+	// 各末端部位の移動距離の平均
+	float right_foot_dist;
+	float left_foot_dist;
+	float right_hand_dist;
+	float left_hand_dist;
+	float head_dist;
+
+	// 肩を基準としたねじれの平均
+	float ChestVal;
+
+	// 係数保存用配列
+	float params_kire[9];
+	float params_furi[7][9];
+};
+
+
 //
 //  動作変形アプリケーションクラス
 //
@@ -103,6 +125,9 @@ class  MotionDeformationApp : public InverseKinematicsCCDApp
 	// 動作変形(タイムワーピング)情報
 	TimeWarpingParam timewarp_deformation;
 
+	// 統計モデル情報
+	ModelParam model_param{};
+
 	// タイムワーピング実行後の前フレームの時間
 	float    before_frame_time;
 
@@ -111,6 +136,12 @@ class  MotionDeformationApp : public InverseKinematicsCCDApp
 
 	// キレレベル
 	float		kire;
+
+	// 利用者の指定するフリレベル
+	float		input_furi;
+
+	// 利用者の指定するキレレベル
+	float		input_kire;
 
 	// 編集中のレベル
 	int			selected_param;
@@ -135,7 +166,6 @@ class  MotionDeformationApp : public InverseKinematicsCCDApp
 
 	// 現在読み込んでいるBVHファイル名
 	string current_file_name;
-
 
   protected:
 	// 動作再生のための変数
@@ -239,11 +269,14 @@ class  MotionDeformationApp : public InverseKinematicsCCDApp
 	// 動作変形後データの書き出し
 	void  ExportMotionData();
 
+	// 統計モデルを用いたパラメータの推定
+	void  EstimateParameters(float input_furi, float input_kire, ModelParam param);
+
 };
 
 // 肩を利用したねじれの計算
 
-double CalcChestVal(const Motion* motion);
+float CalcChestVal(const Motion* motion);
 
 
 //
@@ -254,7 +287,7 @@ double CalcChestVal(const Motion* motion);
 void InitDistanceParameter(vector<DistanceParam> & param);
 
 // 末端部位の移動距離を測定
-void CheckDistance(const Motion& motion, vector<DistanceParam> & param, const char ** segment_names = NULL);
+void CheckDistance(const Motion& motion, vector<DistanceParam> & param, ModelParam m_param, const char ** segment_names = NULL);
 
 // 応急処置
 int Getseg(int i);
