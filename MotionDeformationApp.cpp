@@ -166,7 +166,7 @@ void  MotionDeformationApp::Initialize()
 	// 最初のフレームで必ず計算が走るように、ありえない値で初期化
 	for (int i = 0; i < 7; i++) prev_furi[i] = -999.9f;
 
-	// フリレベル・キレレベルの設定
+	// フリレベル・キレレベルの初期設定
 	furi[0] = 1.0f;
 	furi[1] = 1.0f;
 	furi[2] = 1.0f;
@@ -189,29 +189,32 @@ void  MotionDeformationApp::Initialize()
 	//InitParameter();
 
 	//　Python学習と結果読み込み
-	//int ret = system("python train_model.py");
-	//if (ret == 0) {
-	//	std::ifstream infile("model_params.txt");
-	//	if (infile.is_open()) {
-	//		// kire: 重み8つ + 切片
-	//		infile >> model_param.params_kire[0] >> model_param.params_kire[1]
-	//			>> model_param.params_kire[2] >> model_param.params_kire[3]
-	//			>> model_param.params_kire[4] >> model_param.params_kire[5]
-	//			>> model_param.params_kire[6] >> model_param.params_kire[7]
-	//			>> model_param.params_kire[8];
+	int ret = system("python train_model.py");
+	if (ret == 0) {
+		std::ifstream infile("model_params.txt");
+		if (infile.is_open()) {
+			// kire: 重み8つ + 切片
+			infile >> model_param.params_kire[0] >> model_param.params_kire[1]
+				>> model_param.params_kire[2] >> model_param.params_kire[3]
+				>> model_param.params_kire[4] >> model_param.params_kire[5]
+				>> model_param.params_kire[6] >> model_param.params_kire[7]
+				>> model_param.params_kire[8];
 
 
-	//		// furi: 重み8つ + 切片
-	//		for (int i = 0; i < 7; i++) {
-	//			infile >> model_param.params_furi[i][0] >> model_param.params_furi[i][1]
-	//				>> model_param.params_furi[i][2] >> model_param.params_furi[i][3]
-	//				>> model_param.params_furi[i][4] >> model_param.params_furi[i][5]
-	//				>> model_param.params_furi[i][6] >> model_param.params_furi[i][7]
-	//				>> model_param.params_furi[i][8];
-	//		}
-	//		infile.close();
-	//	}
-	//}
+			// furi: 重み8つ + 切片
+			for (int i = 0; i < 7; i++) {
+				infile >> model_param.params_furi[i][0] >> model_param.params_furi[i][1]
+					>> model_param.params_furi[i][2] >> model_param.params_furi[i][3]
+					>> model_param.params_furi[i][4] >> model_param.params_furi[i][5]
+					>> model_param.params_furi[i][6] >> model_param.params_furi[i][7]
+					>> model_param.params_furi[i][8];
+			}
+			infile.close();
+		}
+	}
+
+	// （仮置き）pythonによる推定結果
+	EstimateParameters(input_furi, input_kire, model_param);
 
 	// タイムライン描画機能の初期化
 	timeline = new Timeline();
@@ -288,22 +291,22 @@ void  MotionDeformationApp::Display()
 	}
 
 	// ２つ目の動作の姿勢を描画
-	if (second_curr_posture)
-	{
-		glPushMatrix();
+	//if (second_curr_posture)
+	//{
+	//	glPushMatrix();
 
-		//steplong_Char00の腰の位置が違ったので強引に修正
-		glTranslatef( 0.0f, 0.0f, 0.3f ); 
+	//	//steplong_Char00の腰の位置が違ったので強引に修正
+	//	glTranslatef( 0.0f, 0.0f, 0.3f ); 
 
-		glEnable(GL_BLEND);
-		glColor4f(1.0f, 0.0f, 1.0f, 0.5f);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); 
-		DrawPosture(*second_curr_posture);
-		DrawPostureShadow(*second_curr_posture, shadow_dir, shadow_color);
-		glDisable(GL_BLEND);
+	//	glEnable(GL_BLEND);
+	//	glColor4f(1.0f, 0.0f, 1.0f, 0.5f);
+	//	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); 
+	//	DrawPosture(*second_curr_posture);
+	//	DrawPostureShadow(*second_curr_posture, shadow_dir, shadow_color);
+	//	glDisable(GL_BLEND);
 
-		glPopMatrix();
-	}
+	//	glPopMatrix();
+	//}
 
 	// タイムラインを描画
 	if ( timeline )
@@ -414,16 +417,15 @@ void  MotionDeformationApp::Keyboard( unsigned char key, int mx, int my )
 	}
 
 	//  レベルの増減 ( [ キーで減少、 ] キーで増加 )
-	if (key == '[' || key == ']')
+	if (key == '[' || key == ']' || key == '{' || key == '}')
 	{
-		// Shiftキーなどの修飾キーが押されている状態を取得する
-		int mod = glutGetModifiers();
+		float delta = 0.0f; // 変化量を保持する変数
 
-		// Shiftキーが押されていれば0.1、そうでなければ1.0を変化量とする
-		float step = (mod & GLUT_ACTIVE_SHIFT) ? 0.1f : 1.0f;
-
-		// 変化量が+か-かを判別する
-		float delta = (key == ']') ? step : -step; 
+		// キーの種類に応じて変化量を決定する
+		if (key == ']') delta = 1.0f;       // ] キーで +1.0
+		else if (key == '[') delta = -1.0f;  // [ キーで -1.0
+		else if (key == '}') delta = 0.1f;   // } (Shift + ]) で +0.1
+		else if (key == '{') delta = -0.1f;  // { (Shift + [) で -0.1
 
 		if (selected_param == 7) // キレレベル
 		{

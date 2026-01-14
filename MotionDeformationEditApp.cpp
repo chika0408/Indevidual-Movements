@@ -148,31 +148,31 @@ void  MotionDeformationEditApp::Display()
 		}
 
 		// ２つ目の動作の姿勢を描画
-		if (second_curr_posture)
-		{
-			glPushMatrix();
-			
-			//腰の位置を基準に２つの動作の位置を合わせる
-			//計算用変数
-			if (root_diff.x == NULL) {
-				Point3f p1, p2;
-				p1 = deformed_posture->root_pos;
-				p2 = second_curr_posture->root_pos;
+		//if (second_curr_posture)
+		//{
+		//	glPushMatrix();
+		//	
+		//	//腰の位置を基準に２つの動作の位置を合わせる
+		//	//計算用変数
+		//	if (root_diff.x == NULL) {
+		//		Point3f p1, p2;
+		//		p1 = deformed_posture->root_pos;
+		//		p2 = second_curr_posture->root_pos;
 
-				if (p1.x > -100000)
-					root_diff = p1 - p2;
-			}
-			glTranslatef(root_diff.x, root_diff.y, root_diff.z);
+		//		if (p1.x > -100000)
+		//			root_diff = p1 - p2;
+		//	}
+		//	glTranslatef(root_diff.x, root_diff.y, root_diff.z);
 
-			glEnable(GL_BLEND);
-			glColor4f(1.0f, 0.0f, 1.0f, 0.5f);
-			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-			DrawPosture(*second_curr_posture);
-			DrawPostureShadow(*second_curr_posture, shadow_dir, shadow_color);
-			glDisable(GL_BLEND);
+		//	glEnable(GL_BLEND);
+		//	glColor4f(1.0f, 0.0f, 1.0f, 0.5f);
+		//	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		//	DrawPosture(*second_curr_posture);
+		//	DrawPostureShadow(*second_curr_posture, shadow_dir, shadow_color);
+		//	glDisable(GL_BLEND);
 
-			glPopMatrix();
-		}
+		//	glPopMatrix();
+		//}
 	}
 
 	// キー姿勢編集モード
@@ -415,16 +415,15 @@ void  MotionDeformationEditApp::Keyboard( unsigned char key, int mx, int my )
 	}
 
 	//  レベルの増減 ( [ キーで減少、 ] キーで増加 )
-	if (key == '[' || key == ']')
+	if (key == '[' || key == ']' || key == '{' || key == '}')
 	{
-		// Shiftキーなどの修飾キーが押されている状態を取得する
-		int mod = glutGetModifiers();
+		float delta = 0.0f; // 変化量を保持する変数
 
-		// Shiftキーが押されていれば0.1、そうでなければ1.0を変化量とする
-		float step = (mod & GLUT_ACTIVE_SHIFT) ? 0.1f : 1.0f;
-
-		// 変化量が+か-かを判別する
-		float delta = (key == ']') ? step : -step;
+		// キーの種類に応じて変化量を決定する
+		if (key == ']') delta = 1.0f;       // ] キーで +1.0
+		else if (key == '[') delta = -1.0f;  // [ キーで -1.0
+		else if (key == '}') delta = 0.1f;   // } (Shift + ]) で +0.1
+		else if (key == '{') delta = -0.1f;  // { (Shift + [) で -0.1
 
 		if (selected_param == 7) // キレレベル
 		{
@@ -563,29 +562,29 @@ void  MotionDeformationEditApp::Keyboard( unsigned char key, int mx, int my )
 		}
 		// 変形後の動作をBVH動作ファイルとして保存
 		SaveDeformedMotionAsBVH(output_file_name.c_str());
+
+		std::ofstream outputfile("dataset.csv", std::ios::app);
+
+		if (!outputfile.is_open()) {
+			printf("Error: Could not open for writing.\n");
+		}
+
+		// 入力書き込み処理
+		outputfile << kire << "," << furi[0] << ","
+			<< model_param.right_foot_dist << ","
+			<< model_param.left_foot_dist << ","
+			<< model_param.right_hand_dist << ","
+			<< model_param.left_hand_dist << ","
+			<< model_param.head_dist << ","
+			<< model_param.ChestVal << ",";
+
+		outputfile << kire << ",";
+		for (int i = 0; i < 7; i++) {
+			outputfile << furi[i] << (i == 6 ? "" : ",");
+		}
+		outputfile << "\n";
+		outputfile.close();
 	}
-
-	std::ofstream outputfile("dataset.csv", std::ios::app);
-
-	if (!outputfile.is_open()) {
-		printf("Error: Could not open for writing.\n");
-	}
-
-	// 入力書き込み処理
-	outputfile << kire << "," << furi[0] << ","
-		<< model_param.right_foot_dist << ","
-		<< model_param.left_foot_dist << ","
-		<< model_param.right_hand_dist << ","
-		<< model_param.left_hand_dist << ","
-		<< model_param.head_dist << ","
-		<< model_param.ChestVal << ",";
-
-	outputfile << kire << ",";
-	for (int i = 0; i < 7; i++) {
-		outputfile << furi[i] << (i == 6 ? "" : ",");
-	}
-	outputfile << "\n";
-	outputfile.close();
 }
 
 

@@ -32,7 +32,7 @@ X = df[['input_sharpness', 'input_magnitude',
         'input_ChestVal']]
 
 # 学習と書き出し
-with open('model_params.txt', 'w') as f:
+with open('model_params.csv', 'w') as f:
     # kire の学習
     model_kire = LinearRegression()
     model_kire.fit(X, df['target_kire'])
@@ -50,4 +50,4 @@ with open('model_params.txt', 'w') as f:
                 {model_furi.coef_[4]} {model_furi.coef_[5]} {model_furi.coef_[6]} {model_furi.coef_[7]} \
                 {model_furi.intercept_}\n")
 
-print("学習完了: model_params.txt を更新しました。")
+print("学習完了: model_params.csv を更新しました。")
