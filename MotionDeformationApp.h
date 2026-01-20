@@ -274,6 +274,12 @@ class  MotionDeformationApp : public InverseKinematicsCCDApp
 
 };
 
+// 骨格に含まれる名前をチェックして、適切な部位名リストを作成する関数
+void GetAdaptiveSegmentNames(const Skeleton* skeleton, const char** names);
+
+// 骨格に含まれる名前をチェックして、適切な関節名リストを作成する関数
+void GetAdaptiveJointNames(const Skeleton* skeleton, const char** names);
+
 // 肩を利用したねじれの計算
 
 float CalcChestVal(const Motion* motion);

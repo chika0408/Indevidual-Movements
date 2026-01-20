@@ -16,6 +16,7 @@
 #include "MotionDeformationApp.h"
 #include "HumanBody.h"
 #include <vector>
+#include <algorithm>
 
 // csvファイル作成のため
 #include <fstream>
@@ -84,6 +85,127 @@ MotionDeformationApp::~MotionDeformationApp()
 
 }
 
+//
+// 骨格に含まれる名前をチェックして、適切な部位名リストを作成する関数
+//
+
+void  GetAdaptiveSegmentNames(const Skeleton* skeleton, const char** names)
+{
+	// デフォルト（Char00系）を設定
+	names[SEG_R_FOOT] = "RightFoot";
+	names[SEG_L_FOOT] = "LeftFoot";
+	names[SEG_R_HAND] = "RightHand";
+	names[SEG_L_HAND] = "LeftHand";
+	names[SEG_PELVIS] = "Hips";
+	names[SEG_CHEST] = "Spine3";//chest
+	names[SEG_HEAD] = "Neck";
+
+	if (!skeleton) return;
+
+	// 現在の設定名が見つからなければ、代替案(alt_name)を探して設定する
+	auto TryReplace = [&](int seg_idx, const char* alt_name) {
+		bool found = false;
+		// 現在の設定名があるかチェック
+		for (int i = 0; i < skeleton->num_segments; i++) {
+			if (strstr(skeleton->segments[i]->name.c_str(), names[seg_idx])) {
+				found = true;
+				break;
+			}
+		}
+		// なければ代替案をチェック
+		if (!found) {
+			for (int i = 0; i < skeleton->num_segments; i++) {
+				if (strstr(skeleton->segments[i]->name.c_str(), alt_name)) {
+					names[seg_idx] = alt_name; // 代替案を採用
+					break;
+				}
+			}
+		}
+		};
+
+	// 一般的なBVH（sample_walking2など）向けの代替名をチェック
+	TryReplace(SEG_R_FOOT, "RightAnkle");
+	TryReplace(SEG_L_FOOT, "LeftAnkle");
+	TryReplace(SEG_R_HAND, "RightWrist");
+	TryReplace(SEG_L_HAND, "LeftWrist");
+	TryReplace(SEG_CHEST, "Chest");
+	TryReplace(SEG_CHEST, "Spine"); // ChestもなければSpineを試す
+}
+
+//
+// 骨格に含まれる名前をチェックして、適切な関節名リストを作成する関数
+//
+void GetAdaptiveJointNames(const Skeleton* skeleton, const char** names)
+{
+	// デフォルト設定
+	names[JOI_R_SHOULDER] = "RightArm";
+	names[JOI_L_SHOULDER] = "LeftArm";
+	names[JOI_R_ELBOW] = "RightForeArm";
+	names[JOI_L_ELBOW] = "LeftForeArm";
+	names[JOI_R_WRIST] = "RightHand";
+	names[JOI_L_WRIST] = "LeftHand";
+	names[JOI_R_HIP] = "RightUpLeg";
+	names[JOI_L_HIP] = "LeftUpLeg";
+	names[JOI_R_KNEE] = "RightLeg";
+	names[JOI_L_KNEE] = "LeftLeg";
+	names[JOI_R_ANKLE] = "RightFoot";
+	names[JOI_L_ANKLE] = "LeftFoot";
+	names[JOI_BACK] = "Spine";
+	names[JOI_NECK] = "Neck";
+
+	if (!skeleton) return;
+
+	// ヘルパー: 代替案を探す
+	auto TryReplace = [&](int joi_idx, const char* alt_name) {
+		bool found = false;
+		for (int i = 0; i < skeleton->num_joints; i++) {
+			if (strstr(skeleton->joints[i]->name.c_str(), names[joi_idx])) {
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			for (int i = 0; i < skeleton->num_joints; i++) {
+				if (strstr(skeleton->joints[i]->name.c_str(), alt_name)) {
+					names[joi_idx] = alt_name;
+					break;
+				}
+			}
+		}
+		};
+
+	// 一般的なBVH（sample_walking2など）向けの代替名チェック
+	// 肩・腕周り
+	TryReplace(JOI_R_SHOULDER, "RightShoulder"); // "RightArm" がなければ "RightShoulder"
+	TryReplace(JOI_R_SHOULDER, "RightCollar");   // それもなければ "RightCollar"
+	TryReplace(JOI_L_SHOULDER, "LeftShoulder");
+	TryReplace(JOI_L_SHOULDER, "LeftCollar");
+
+	// 肘・前腕
+	TryReplace(JOI_R_ELBOW, "RightElbow");       // "RightForeArm" がなければ "RightElbow"
+	TryReplace(JOI_L_ELBOW, "LeftElbow");
+
+	// 手首
+	TryReplace(JOI_R_WRIST, "RightWrist");       // "RightHand" がなければ "RightWrist"
+	TryReplace(JOI_L_WRIST, "LeftWrist");
+
+	// 腰・腿
+	TryReplace(JOI_R_HIP, "RightHip");           // "RightUpLeg" がなければ "RightHip"
+	TryReplace(JOI_L_HIP, "LeftHip");
+
+	// 膝・すね
+	TryReplace(JOI_R_KNEE, "RightKnee");         // "RightLeg" がなければ "RightKnee"
+	TryReplace(JOI_L_KNEE, "LeftKnee");
+
+	// 足首
+	TryReplace(JOI_R_ANKLE, "RightAnkle");       // "RightFoot" がなければ "RightAnkle"
+	TryReplace(JOI_L_ANKLE, "LeftAnkle");
+
+	// 背骨・胸
+	TryReplace(JOI_BACK, "Chest");               // "Spine" がなければ "Chest"
+	TryReplace(JOI_BACK, "Spine1");
+}
+
 
 //
 //  初期化
@@ -104,13 +226,20 @@ void  MotionDeformationApp::Initialize()
 
 	// 解析を行う動作データの骨格の、主要体節の名前を設定
 	const char * primary_segment_names[NUM_PRIMARY_SEGMENTS];
-	primary_segment_names[SEG_R_FOOT] = "RightFoot";
-	primary_segment_names[SEG_L_FOOT] = "LeftFoot";
-	primary_segment_names[SEG_R_HAND] = "RightHand";
-	primary_segment_names[SEG_L_HAND] = "LeftHand";
-	primary_segment_names[SEG_PELVIS] = "Hips";
-	primary_segment_names[SEG_CHEST] = "Spine3"; //chest
-	primary_segment_names[SEG_HEAD] = "Neck";
+
+	if (motion && motion->body) {
+		GetAdaptiveSegmentNames(motion->body, primary_segment_names);
+	}
+	else {
+		// フォールバック
+		primary_segment_names[SEG_R_FOOT] = "RightFoot";
+		primary_segment_names[SEG_L_FOOT] = "LeftFoot";
+		primary_segment_names[SEG_R_HAND] = "RightHand";
+		primary_segment_names[SEG_L_HAND] = "LeftHand";
+		primary_segment_names[SEG_PELVIS] = "Hips";
+		primary_segment_names[SEG_CHEST] = "Spine3";
+		primary_segment_names[SEG_HEAD] = "Neck";
+	}
 
 	// 末端部位の移動距離の合計をフレーム毎に配列として出力
 	CheckDistance(*motion, distanceinfo, model_param, primary_segment_names);
@@ -129,16 +258,6 @@ void  MotionDeformationApp::Initialize()
 	if (motion && motion->body) {
 		// 既存のmotion->bodyからHumanBodyを作成
 		my_human_body = new HumanBody(motion->body);
-
-		// 部位名の登録（既存コードと同じ定義を使用）
-		const char* primary_segment_names[NUM_PRIMARY_SEGMENTS];
-		primary_segment_names[SEG_R_FOOT] = "RightFoot";
-		primary_segment_names[SEG_L_FOOT] = "LeftFoot";
-		primary_segment_names[SEG_R_HAND] = "RightHand";
-		primary_segment_names[SEG_L_HAND] = "LeftHand";
-		primary_segment_names[SEG_PELVIS] = "Hips";
-		primary_segment_names[SEG_CHEST] = "Spine3";
-		primary_segment_names[SEG_HEAD] = "Neck";
 
 		for (int i = 0; i < NUM_PRIMARY_SEGMENTS; i++) {
 			my_human_body->SetPrimarySegment((PrimarySegmentType)i, primary_segment_names[i]);
@@ -176,8 +295,8 @@ void  MotionDeformationApp::Initialize()
 	furi[6] = 1.0f;
 	kire = 1.0f;
 
-	input_furi = 0.0f;
-	input_kire = 0.0f;
+	input_furi = -10.0f;
+	input_kire = -10.0f;
 
 	// 編集中のレベルの設定
 	selected_param = 0;
@@ -189,32 +308,32 @@ void  MotionDeformationApp::Initialize()
 	//InitParameter();
 
 	//　Python学習と結果読み込み
-	int ret = system("python train_model.py");
-	if (ret == 0) {
-		std::ifstream infile("model_params.txt");
-		if (infile.is_open()) {
-			// kire: 重み8つ + 切片
-			infile >> model_param.params_kire[0] >> model_param.params_kire[1]
-				>> model_param.params_kire[2] >> model_param.params_kire[3]
-				>> model_param.params_kire[4] >> model_param.params_kire[5]
-				>> model_param.params_kire[6] >> model_param.params_kire[7]
-				>> model_param.params_kire[8];
+	//int ret = system("python train_model.py");
+	//if (ret == 0) {
+	//	std::ifstream infile("model_params.txt");
+	//	if (infile.is_open()) {
+	//		// kire: 重み8つ + 切片
+	//		infile >> model_param.params_kire[0] >> model_param.params_kire[1]
+	//			>> model_param.params_kire[2] >> model_param.params_kire[3]
+	//			>> model_param.params_kire[4] >> model_param.params_kire[5]
+	//			>> model_param.params_kire[6] >> model_param.params_kire[7]
+	//			>> model_param.params_kire[8];
 
 
-			// furi: 重み8つ + 切片
-			for (int i = 0; i < 7; i++) {
-				infile >> model_param.params_furi[i][0] >> model_param.params_furi[i][1]
-					>> model_param.params_furi[i][2] >> model_param.params_furi[i][3]
-					>> model_param.params_furi[i][4] >> model_param.params_furi[i][5]
-					>> model_param.params_furi[i][6] >> model_param.params_furi[i][7]
-					>> model_param.params_furi[i][8];
-			}
-			infile.close();
-		}
-	}
+	//		// furi: 重み8つ + 切片
+	//		for (int i = 0; i < 7; i++) {
+	//			infile >> model_param.params_furi[i][0] >> model_param.params_furi[i][1]
+	//				>> model_param.params_furi[i][2] >> model_param.params_furi[i][3]
+	//				>> model_param.params_furi[i][4] >> model_param.params_furi[i][5]
+	//				>> model_param.params_furi[i][6] >> model_param.params_furi[i][7]
+	//				>> model_param.params_furi[i][8];
+	//		}
+	//		infile.close();
+	//	}
+	//}
 
-	// （仮置き）pythonによる推定結果
-	EstimateParameters(input_furi, input_kire, model_param);
+	//// （仮置き）pythonによる推定結果
+	/*EstimateParameters(input_furi, input_kire, model_param);*/
 
 	// タイムライン描画機能の初期化
 	timeline = new Timeline();
@@ -715,7 +834,7 @@ void  MotionDeformationApp::InitMotion( int no )
 		//LoadBVH("radio_middle_2_Char00.bvh"); //4
 
 		//LoadBVH("pointshort_Char00.bvh");
-		LoadBVH("radio_new_4_Char00.bvh");
+		LoadBVH("radio_new_3_Char00.bvh");
 		LoadSecondBVH("radio_long_4_Char00.bvh");
 
 		//LoadSecondBVH("steplong_Char00.bvh");
@@ -1162,27 +1281,26 @@ float CalcChestVal(const Motion* motion)
 	if (!motion) return 0.0;
 
 	// 1. 関節の特定
-	// HumanBodyクラスを使って関節IDを取得します
 	HumanBody human_body(motion->body);
 
-	// 一般的なBVHでの名前に対応（RightArmが右肩、LeftArmが左肩に対応することが多い）
-	// お使いのボーン名に合わせて変更してください ("RightShoulder" など)
-	human_body.SetPrimaryJoint(JOI_R_SHOULDER, "RightArm");
-	human_body.SetPrimaryJoint(JOI_L_SHOULDER, "LeftArm");
+	// 候補リストを使って存在するものを登録する
+	const char* r_shoulder_candidates[] = { "RightArm", "RightShoulder", "RightCollar" };
+	const char* l_shoulder_candidates[] = { "LeftArm",  "LeftShoulder",  "LeftCollar" };
+
+	// 右肩の特定
+	for (auto name : r_shoulder_candidates) {
+		human_body.SetPrimaryJoint(JOI_R_SHOULDER, name);
+		if (human_body.GetPrimaryJoint(JOI_R_SHOULDER) != -1) break;
+	}
+
+	// 左肩の特定
+	for (auto name : l_shoulder_candidates) {
+		human_body.SetPrimaryJoint(JOI_L_SHOULDER, name);
+		if (human_body.GetPrimaryJoint(JOI_L_SHOULDER) != -1) break;
+	}
 
 	int rShldrIdx = human_body.GetPrimaryJoint(JOI_R_SHOULDER);
 	int lShldrIdx = human_body.GetPrimaryJoint(JOI_L_SHOULDER);
-
-	// 関節が見つからない場合のフォールバック（名前が違う場合など）
-	if (rShldrIdx == -1 || lShldrIdx == -1) {
-		// 別の名前候補でも試す例
-		human_body.SetPrimaryJoint(JOI_R_SHOULDER, "RightShoulder");
-		human_body.SetPrimaryJoint(JOI_L_SHOULDER, "LeftShoulder");
-		rShldrIdx = human_body.GetPrimaryJoint(JOI_R_SHOULDER);
-		lShldrIdx = human_body.GetPrimaryJoint(JOI_L_SHOULDER);
-
-		if (rShldrIdx == -1 || lShldrIdx == -1) return 0.0;
-	}
 
 	std::vector<float> torsionValues;
 	torsionValues.reserve(motion->num_frames);
@@ -1239,15 +1357,13 @@ float ShowPopupInput(const char* title, const char* prompt, float current_val)
 	char buffer[128];
 	sprintf(buffer, "%f", current_val); // 現在の値を初期値としてセット
 
-	// 本来は複雑なGUIプログラムが必要ですが、研究用プロトタイプとして
-	// 最も簡便な「コンソール入力をポップアップ風に見せる」方法を提案します
-	// (※完全に独自のウィンドウを作るのは数百行のコードが必要になるため)
+	// コンソール入力をポップアップ風に見せる
 
 	std::cout << "--- " << title << " ---" << std::endl;
 	std::cout << prompt << " (Current: " << current_val << ")" << std::endl;
 	std::cout << ">> Please enter value in the console and press Enter." << std::endl;
 
-	// ウィンドウを前面に持ってくる命令（可能であれば）
+	// ウィンドウを前面に持ってくる
 #ifdef _WIN32
 	SetForegroundWindow(GetConsoleWindow());
 #endif
@@ -1377,29 +1493,36 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, ModelPar
 	// --- 後半：セグメンテーションロジックの刷新 ---
 
 	// 1. 統計情報の取得（全体の平均・最小・最大）
-	float max_val = 0.0f;
-	float min_val = 100000.0f;
+	// 単純なmin/avgではなく、ソートしてパーセンタイル（分位点）を取得する
+	std::vector<float> sorted_dists;
+	sorted_dists.reserve(param.size());
 	float avg_val = 0.0f;
+
 	for (const auto& p : param) {
-		if (p.distanceadd != 0.0f) {
-			if (p.distanceadd > max_val) max_val = p.distanceadd;
-			if (p.distanceadd < min_val) min_val = p.distanceadd;
-		}
+		sorted_dists.push_back(p.distanceadd);
 		avg_val += p.distanceadd;
 	}
 	avg_val /= param.size();
 
+	// 小さい順に並べ替え
+	std::sort(sorted_dists.begin(), sorted_dists.end());
+
+	// ノイズ（0などの外れ値）を除外するため、下位10%〜20%の値をベースラインとする
+	int baseline_index = (int)(sorted_dists.size() * 0.20f); // 下位20%を採用
+	if (baseline_index >= sorted_dists.size()) baseline_index = sorted_dists.size() - 1;
+	float robust_min_val = sorted_dists[baseline_index];
+
 	// 2. 閾値の設定 (ヒステリシス)
-	// ベース閾値：最小値（ノイズレベル）と平均値の間などから決定
-	// ※データによって調整してください。平均の60%程度を活動基準と仮定しています。
-	float threshold_ratio = 0.6f;
-	float base_threshold = avg_val * threshold_ratio;
+	// ベースライン（実質最小値）と平均値の間を取る
+	// ノイズフロアよりも確実に高い位置に閾値を設定する
+	float base_threshold = robust_min_val + (avg_val - robust_min_val) * 0.5f;
 
-	// ノイズフロア対策：あまりに閾値が低すぎる場合は底上げする (例: 1.0)
-	//if (base_threshold < 1.0f) base_threshold = 1.0f;
+	// デバッグ用出力（コンソールで確認したい場合）
+	// std::cout << "Avg: " << avg_val << " Min(raw): " << sorted_dists[0] 
+	//           << " RobustMin(15%): " << robust_min_val << " Thresh: " << base_threshold << std::endl;
 
-	float high_thresh = base_threshold * 1.2f; // 開始判定用（高め）
-	float low_thresh = base_threshold * 0.8f; // 終了判定用（低め）
+	float high_thresh = base_threshold * 1.2f; // 開始判定用
+	float low_thresh = base_threshold * 0.8f;  // 終了判定用
 
 	// 3. 閾値判定 (Pass 1)
 	bool is_moving = false;
@@ -1522,13 +1645,19 @@ void  InitTimeDeformationParameter(
 		if (now_frame > 0 && now_frame < distance.size())
 		{
 			// 今の動作の始まりの時間がワーピング開始フレーム
+			bool found_in = false;
 			for (int i = now_frame; i > 0; i--)
 			{
 				if (distance[i].movecheck == 1 && distance[i - 1].movecheck == 0)
 				{
 					param.warp_in_duration_time = i * motion.interval;
+					found_in = true;
 					break;
 				}
+			}
+			// 見つからず、かつ0フレーム目が動作中なら0を開始点とする
+			if (!found_in && distance[0].movecheck == 1) {
+				param.warp_in_duration_time = 0.0f;
 			}
 
 			// 今の動作の終わりの時間がワーピング終了フレーム
@@ -1544,6 +1673,7 @@ void  InitTimeDeformationParameter(
 			}
 
 			// 動いている時間の終わりがワーピング前のキー時刻
+			bool found_key = false;
 			if (distance[now_frame].movecheck == 0)
 			{
 				for (int i = now_frame; i > 0; i--)
@@ -1551,6 +1681,7 @@ void  InitTimeDeformationParameter(
 					if (distance[i].movecheck == 1)
 					{
 						param.warp_key_time = i * motion.interval;
+						found_key = true;
 						break;
 					}
 				}
@@ -1562,9 +1693,14 @@ void  InitTimeDeformationParameter(
 					if (distance[i + 1].movecheck == 0)
 					{
 						param.warp_key_time = i * motion.interval;
+						found_key = true;
 						break;
 					}
 				}
+			}
+			// 最後まで動作している場合
+			if (!found_key) {
+				param.warp_key_time = motion.GetDuration();
 			}
 		}
 		// 動作のはじめのフレーム
@@ -1927,13 +2063,19 @@ void  InitDeformationParameter(
 		if (now_frame > 0 && now_frame < distance.size())
 		{
 			// 今の動作の始まりの時間がワーピング開始フレーム
+			bool found_in = false;
 			for (int i = now_frame; i > 0; i--)
 			{
 				if (distance[i].movecheck == 1 && distance[i - 1].movecheck == 0)
 				{
 					param.blend_in_duration = i * motion.interval;
+					found_in = true;
 					break;
 				}
+			}
+			// 見つからず、かつ0フレーム目が動作中なら0を開始点とする
+			if (!found_in && distance[0].movecheck == 1) {
+				param.blend_in_duration = 0.0f;
 			}
 
 			// 今の動作の終わりの時間がワーピング終了フレーム
@@ -1948,6 +2090,7 @@ void  InitDeformationParameter(
 			}
 
 			// 動いている時間の終わりがキー時刻
+			bool found_key = false;
 			if (distance[now_frame].movecheck == 0)
 			{
 				for (int i = now_frame; i > 0; i--)
@@ -1955,6 +2098,7 @@ void  InitDeformationParameter(
 					if (distance[i].movecheck == 1)
 					{
 						param.key_time = i * motion.interval;
+						found_key = true;
 						break;
 					}
 				}
@@ -1966,9 +2110,15 @@ void  InitDeformationParameter(
 					if (distance[i + 1].movecheck == 0)
 					{
 						param.key_time = i * motion.interval;
+						found_key = true;
 						break;
 					}
 				}
+			}
+			// 見つからなかった場合（最後まで動作している場合）、終了時刻を最後にする
+			if (!found_key) 
+			{
+				param.key_time = motion.GetDuration();
 			}
 		}
 		// 最初のフレーム
@@ -2112,13 +2262,8 @@ void UpdateKeyposeByPosition(MotionWarpingParam& param, Motion& motion, float fu
 	human_body = new HumanBody(motion.body);
 
 	const char* primary_segment_names[NUM_PRIMARY_SEGMENTS];
-	primary_segment_names[SEG_R_FOOT] = "RightFoot";
-	primary_segment_names[SEG_L_FOOT] = "LeftFoot";
-	primary_segment_names[SEG_R_HAND] = "RightHand";
-	primary_segment_names[SEG_L_HAND] = "LeftHand";
-	primary_segment_names[SEG_PELVIS] = "Hips";
-	primary_segment_names[SEG_CHEST] = "Spine3"; //chest
-	primary_segment_names[SEG_HEAD] = "Neck";
+
+	GetAdaptiveSegmentNames(motion.body, primary_segment_names);
 
 	for (int i = 0; i < NUM_PRIMARY_SEGMENTS; i++)
 	{
@@ -2192,20 +2337,15 @@ void UpdateKeyposeByVelocity(MotionWarpingParam& param, Motion& motion, float fu
 	HumanBody* human_body = new HumanBody(motion.body);
 
 	const char* primary_joint_names[NUM_PRIMARY_JOINTS];
-	primary_joint_names[JOI_R_SHOULDER] = "RightArm";
-	primary_joint_names[JOI_L_SHOULDER] = "LeftArm";
-	primary_joint_names[JOI_R_ELBOW] = "RightForeArm";
-	primary_joint_names[JOI_L_ELBOW] = "LeftForeArm";
-	primary_joint_names[JOI_R_WRIST] = "RightHand";
-	primary_joint_names[JOI_L_WRIST] = "LeftHand";
-	primary_joint_names[JOI_R_HIP] = "RightUpLeg";
-	primary_joint_names[JOI_L_HIP] = "LeftUpLeg";
-	primary_joint_names[JOI_R_KNEE] = "RightLeg";
-	primary_joint_names[JOI_L_KNEE] = "LeftLeg";
-	primary_joint_names[JOI_R_ANKLE] = "RightFoot";
-	primary_joint_names[JOI_L_ANKLE] = "LeftFoot";
-	primary_joint_names[JOI_BACK] = "Spine";
-	primary_joint_names[JOI_NECK] = "Neck";
+
+	// 自動判定関数を使用
+	GetAdaptiveJointNames(motion.body, primary_joint_names);
+
+	// 設定された名前を登録
+	for (int i = 0; i < NUM_PRIMARY_JOINTS; i++)
+	{
+		human_body->SetPrimaryJoint((PrimaryJointType)i, primary_joint_names[i]);
+	}
 
 	for (int i = 0; i < NUM_PRIMARY_JOINTS; i++)
 	{
@@ -2229,28 +2369,47 @@ void UpdateKeyposeByVelocity(MotionWarpingParam& param, Motion& motion, float fu
 		joint_no = -1;
 
 		// 実際に回転を確認する関節番号を取得
-		if (i == 6)
+		// --- 足 (Leg) ---
+		if (i == 6) // JOI_R_HIP (右股関節)
 		{
 			joint_no = human_body->GetPrimaryJoint(JOI_R_HIP);
-			// 回転倍率の設定
 			scale_ratio = furi[0];
 		}
-		else if (i == 7)
+		else if (i == 8) // JOI_R_KNEE (右膝)
+		{
+			joint_no = human_body->GetPrimaryJoint(JOI_R_KNEE);
+			scale_ratio = furi[0];
+		}
+		else if (i == 7) // JOI_L_HIP (左股関節)
 		{
 			joint_no = human_body->GetPrimaryJoint(JOI_L_HIP);
-			// 回転倍率の設定
 			scale_ratio = furi[1];
 		}
-		else if (i == 0)
+		else if (i == 9) // JOI_L_KNEE (左膝)
+		{
+			joint_no = human_body->GetPrimaryJoint(JOI_L_KNEE);
+			scale_ratio = furi[1];
+		}
+
+		// --- 腕 (Arm) ---
+		else if (i == 0) // JOI_R_SHOULDER (右肩)
 		{
 			joint_no = human_body->GetPrimaryJoint(JOI_R_SHOULDER);
-			// 回転倍率の設定
 			scale_ratio = furi[2];
 		}
-		else if (i == 1)
+		else if (i == 2) // JOI_R_ELBOW (右肘)
+		{
+			joint_no = human_body->GetPrimaryJoint(JOI_R_ELBOW);
+			scale_ratio = furi[2];
+		}
+		else if (i == 1) // JOI_L_SHOULDER (左肩)
 		{
 			joint_no = human_body->GetPrimaryJoint(JOI_L_SHOULDER);
-			// 回転倍率の設定
+			scale_ratio = furi[3];
+		}
+		else if (i == 3) // JOI_L_ELBOW (左肘)
+		{
+			joint_no = human_body->GetPrimaryJoint(JOI_L_ELBOW);
 			scale_ratio = furi[3];
 		}
 
@@ -2300,6 +2459,21 @@ void UpdateKeyposeByVelocity(MotionWarpingParam& param, Motion& motion, float fu
 
 		param.key_pose.joint_rotations[joint_no].set(new_q);
 	}
+
+	// ルート位置（移動量）のスケーリング処理
+	// 足（右足:furi[0], 左足:furi[1]）のフリレベルの平均を移動倍率とする
+	float move_scale = (furi[0] + furi[1]) / 2.0f;
+
+	// 元の動作における移動ベクトル（速度）を計算
+	// (現在のフレームの位置 - 1フレーム前の位置)
+	Vector3f root_velocity;
+	root_velocity = param.org_pose.root_pos - before_posture.root_pos;
+
+	// 移動ベクトルに倍率を掛ける（足を1.5倍振るなら、移動も1.5倍にする）
+	root_velocity = root_velocity * move_scale;
+
+	// 1フレーム前の位置に、補正した移動ベクトルを足して新しい位置にする
+	param.key_pose.root_pos = before_posture.root_pos + root_velocity;
 	delete human_body;
 }
 
