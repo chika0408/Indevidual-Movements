@@ -443,6 +443,12 @@ void  MotionDeformationEditApp::Keyboard( unsigned char key, int mx, int my )
 		//}
 	}
 
+	// 9 キーで新しいお題を設定 (新規追加)
+	if (key == '9')
+	{
+		SetRandomTargets();
+	}
+
 	// スペースキーでモードを変更
 	if ( key == ' ' )
 	{

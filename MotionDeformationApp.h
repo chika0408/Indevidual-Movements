@@ -287,6 +287,7 @@ class  MotionDeformationApp : public InverseKinematicsCCDApp
 	// 統計モデルを用いたパラメータの推定
 	void  EstimateParameters(float input_furi, float input_kire, ModelParam param);
 
+	void SetRandomTargets();
 };
 
 // 骨格に含まれる名前をチェックして、適切な部位名リストを作成する関数

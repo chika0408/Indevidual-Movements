@@ -561,6 +561,12 @@ void  MotionDeformationApp::Keyboard( unsigned char key, int mx, int my )
 		//}
 	}
 
+	// 9 キーで新しいお題を設定 (新規追加)
+	if (key == '9')
+	{
+		SetRandomTargets();
+	}
+
 	// d キーで表示姿勢の変更
 	if ( key == 'd' )
 	{
@@ -657,7 +663,7 @@ void  MotionDeformationApp::Keyboard( unsigned char key, int mx, int my )
 		}
 
 		// 入力書き込み処理
-		outputfile << kire << "," << furi[0] << ","
+		outputfile << input_kire << "," << input_furi<< ","
 			<< model_param.right_foot_dist << ","
 			<< model_param.left_foot_dist << ","
 			<< model_param.right_hand_dist << ","
@@ -667,7 +673,7 @@ void  MotionDeformationApp::Keyboard( unsigned char key, int mx, int my )
 			<< model_param.moving_ratio << ","
 			<< model_param.interaction << ",";
 
-
+		// 出力書き込み処理
 		outputfile << kire << ",";
 		for (int i = 0; i < 7; i++) {
 			outputfile << furi[i] << (i == 6 ? "" : ",");
@@ -1291,6 +1297,7 @@ void  MotionDeformationApp::EstimateParameters(float input_furi, float input_kir
 	timewarp_deformation.bezier_control2.x = clamp(estimated_vals[2]);
 	timewarp_deformation.bezier_control2.y = clamp(estimated_vals[3]);
 }
+
 
 //
 // 末端部位の移動距離の合計の情報の初期化
@@ -2706,4 +2713,25 @@ void  PostureWarping( const Posture & org, const Posture & src, const Posture & 
 	v.sub(dest.root_pos, src.root_pos);
 	v.scale(ratio);
 	p.root_pos.add(v,org.root_pos);
+}
+
+
+// ---------------------------------------------------------
+// 今回の「お題（ターゲット）」をランダムに設定する関数
+// ---------------------------------------------------------
+void MotionDeformationApp::SetRandomTargets()
+{
+	std::random_device rd;
+	std::mt19937 gen(rd());
+
+	// 整数で -10 ～ 10 の範囲を指定
+	std::uniform_int_distribution<int> dist(-10, 10);
+
+	// 整数で生成して float にキャストして代入
+	// これで -10.0, -9.0, ... 9.0, 10.0 のような値になります
+	input_kire = (float)dist(gen);
+	input_furi = (float)dist(gen);
+
+	// コンソール確認用（整数っぽく表示）
+	std::cout << ">>> New Target Set! Kire=" << (int)input_kire << ", Furi=" << (int)input_furi << std::endl;
 }
