@@ -244,16 +244,6 @@ void  MotionDeformationApp::Initialize()
 	// 末端部位の移動距離の合計をフレーム毎に配列として出力
 	CheckDistance(*motion, distanceinfo, model_param, primary_segment_names);
 
-	// 確認のためにdistanceinfoをcsvファイルに書き出す
-	//std::ofstream outputfile("distanceinfo_output.csv");
-	//for (auto&& b : distanceinfo) {
-	//	outputfile << b.distanceadd;
-	//	outputfile << ',';
-	//	outputfile << b.move_amount;
-	//	outputfile << '\n';
-	//}
-	//outputfile.close();
-
 	// HumanBodyのセットアップ
 	if (motion && motion->body) {
 		// 既存のmotion->bodyからHumanBodyを作成
@@ -265,13 +255,6 @@ void  MotionDeformationApp::Initialize()
 	}
 	else {
 		my_human_body = NULL;
-	}
-
-	// CSVファイルを開く（上書きモード）
-	csv_file.open("deformed_motion_data.csv");
-	// ヘッダー行を出力
-	if (csv_file.is_open()) {
-		csv_file << "Time,Frame,RightFoot_Dist,LeftFoot_Dist,RightHand_Dist,LeftHand_Dist,Pelvis_Dist,Chest_Dist,Head_Dist,Total_Dist" << std::endl;
 	}
 
 	// 前フレーム座標の初期化
@@ -298,6 +281,9 @@ void  MotionDeformationApp::Initialize()
 	input_furi = -10.0f;
 	input_kire = -10.0f;
 
+	// 交差項の設定
+	model_param.interaction = input_furi * input_kire;
+
 	// 編集中のレベルの設定
 	selected_param = 0;
 
@@ -312,21 +298,32 @@ void  MotionDeformationApp::Initialize()
 	//if (ret == 0) {
 	//	std::ifstream infile("model_params.txt");
 	//	if (infile.is_open()) {
-	//		// kire: 重み8つ + 切片
+	//		// kire: 重み10つ + 切片
 	//		infile >> model_param.params_kire[0] >> model_param.params_kire[1]
 	//			>> model_param.params_kire[2] >> model_param.params_kire[3]
 	//			>> model_param.params_kire[4] >> model_param.params_kire[5]
 	//			>> model_param.params_kire[6] >> model_param.params_kire[7]
-	//			>> model_param.params_kire[8];
+	//			>> model_param.params_kire[8] >> model_param.params_kire[9]
+	//			>> model_param.params_kire[10];
 
-
-	//		// furi: 重み8つ + 切片
+	//		// furi: 重み10つ + 切片
 	//		for (int i = 0; i < 7; i++) {
 	//			infile >> model_param.params_furi[i][0] >> model_param.params_furi[i][1]
 	//				>> model_param.params_furi[i][2] >> model_param.params_furi[i][3]
 	//				>> model_param.params_furi[i][4] >> model_param.params_furi[i][5]
 	//				>> model_param.params_furi[i][6] >> model_param.params_furi[i][7]
-	//				>> model_param.params_furi[i][8];
+	//				>> model_param.params_furi[i][8] >> model_param.params_furi[i][9]
+	//				>> model_param.params_furi[i][10];
+	//		}
+	// 
+	//		// bezier: 重み10つ + 切片
+	//		for (int i = 0; i < 4; i++) {
+	//			infile >> model_param.params_bezier[i][0] >> model_param.params_bezier[i][1]
+	//				>> model_param.params_bezier[i][2] >> model_param.params_bezier[i][3]
+	//				>> model_param.params_bezier[i][4] >> model_param.params_bezier[i][5]
+	//				>> model_param.params_bezier[i][6] >> model_param.params_bezier[i][7]
+	//				>> model_param.params_bezier[i][8] >> model_param.params_bezier[i][9]
+	//				>> model_param.params_bezier[i][10];
 	//		}
 	//		infile.close();
 	//	}
@@ -666,7 +663,10 @@ void  MotionDeformationApp::Keyboard( unsigned char key, int mx, int my )
 			<< model_param.right_hand_dist << ","
 			<< model_param.left_hand_dist << ","
 			<< model_param.head_dist << ","
-			<< model_param.ChestVal << ",";
+			<< model_param.ChestVal << ","
+			<< model_param.moving_ratio << ","
+			<< model_param.interaction << ",";
+
 
 		outputfile << kire << ",";
 		for (int i = 0; i < 7; i++) {
@@ -1247,7 +1247,9 @@ void  MotionDeformationApp::EstimateParameters(float input_furi, float input_kir
 		+ param.params_kire[5] * param.left_hand_dist
 		+ param.params_kire[6] * param.head_dist
 		+ param.params_kire[7] * param.ChestVal
-		+ param.params_kire[8];
+		+ param.params_kire[8] * param.moving_ratio
+		+ param.params_kire[9] * param.interaction
+		+ param.params_kire[10];
 
 	// フリの推定
 	for (int i = 0; i < 7; i++) {
@@ -1259,8 +1261,35 @@ void  MotionDeformationApp::EstimateParameters(float input_furi, float input_kir
 			+ param.params_furi[i][5] * param.left_hand_dist
 			+ param.params_furi[i][6] * param.head_dist
 			+ param.params_furi[i][7] * param.ChestVal
-			+ param.params_furi[i][8];
+			+ param.params_furi[i][8] * param.moving_ratio
+			+ param.params_furi[i][9] * param.interaction
+			+ param.params_furi[i][10];
 	}
+
+	// ベジェ制御点の推定
+	float estimated_vals[4];
+
+	for (int i = 0; i < 4; i++) {
+		estimated_vals[i] = param.params_bezier[i][0] * input_kire
+			+ param.params_bezier[i][1] * input_furi
+			+ param.params_bezier[i][2] * param.right_foot_dist
+			+ param.params_bezier[i][3] * param.left_foot_dist
+			+ param.params_bezier[i][4] * param.right_hand_dist
+			+ param.params_bezier[i][5] * param.left_hand_dist
+			+ param.params_bezier[i][6] * param.head_dist
+			+ param.params_bezier[i][7] * param.ChestVal
+			+ param.params_bezier[i][8] * param.moving_ratio
+			+ param.params_bezier[i][9] * param.interaction
+			+ param.params_bezier[i][10]; // 切片
+	}
+
+	// 推定値をタイムワーピングパラメータに適用
+	auto clamp = [](float v) { return (v < 0.0f) ? 0.0f : ((v > 1.0f) ? 1.0f : v); };
+
+	timewarp_deformation.bezier_control1.x = clamp(estimated_vals[0]);
+	timewarp_deformation.bezier_control1.y = clamp(estimated_vals[1]);
+	timewarp_deformation.bezier_control2.x = clamp(estimated_vals[2]);
+	timewarp_deformation.bezier_control2.y = clamp(estimated_vals[3]);
 }
 
 //
@@ -1613,6 +1642,21 @@ void CheckDistance(const Motion& motion, vector<DistanceParam> & param, ModelPar
 			}
 		}
 	}
+
+	// 7.動作密度の計算
+	int move_count = 0;
+	for (const auto& p : param)
+	{
+		if (p.movecheck == 1)
+			move_count++;
+	}
+	if (!param.empty()) {
+		m_param.moving_ratio = (float)move_count / param.size();
+	}
+	else
+	{
+		m_param.moving_ratio = 0.0f;
+	}
 }
 
 
@@ -1912,6 +1956,10 @@ float Warping(float now_time, TimeWarpingParam& deform)
 
 	half1.y = 0.0f;
 	half2.y = 1.0f;
+
+	// 制御点の座標を求める
+	/*half1 = deform.bezier_control1;
+	half2 = deform.bezier_control2;*/
 
 	// ベジェ曲線のパラメータtを求める(二分探索による近似値)
 	float lower = 0.0f;

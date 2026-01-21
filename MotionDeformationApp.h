@@ -61,6 +61,10 @@ struct TimeWarpingParam
 
 	// 姿勢変形後のキー時刻（時間表記）
 	float		 after_key_time;
+
+	// ベジェ曲線の制御点
+	Point2f		 bezier_control1;
+	Point2f		 bezier_control2;
 };
 
 
@@ -99,9 +103,20 @@ struct  ModelParam
 	// 肩を基準としたねじれの平均
 	float ChestVal;
 
+	// 動いている時間の割合
+	float moving_ratio;
+
+	// 交差項
+	float interaction;
+
 	// 係数保存用配列
-	float params_kire[9];
-	float params_furi[7][9];
+	float params_kire[11];
+	float params_furi[7][11];
+
+	// ベジェ制御点推定用の係数
+	// [4]: 推定する値の数 (0:cp1.x, 1:cp1.y, 2:cp2.x, 3:cp2.y)
+	// [11]: 重みの数 (入力パラメータや特徴量に対する係数 + 切片)
+	float params_bezier[4][11];
 };
 
 
@@ -131,10 +146,10 @@ class  MotionDeformationApp : public InverseKinematicsCCDApp
 	// タイムワーピング実行後の前フレームの時間
 	float    before_frame_time;
 
-	// フリレベル
+	// モーションワーピング倍率
 	float		furi[7];
 
-	// キレレベル
+	// タイムワーピング倍率
 	float		kire;
 
 	// 利用者の指定するフリレベル
