@@ -58,6 +58,12 @@ MotionDeformationApp::MotionDeformationApp() : InverseKinematicsCCDApp()
 	draw_original_posture = false;
 	draw_postures_side_by_side = false;
 	timeline = NULL;
+
+	prev_motion_end_pose = new Posture();
+	if (motion && motion->body) {
+		InitPosture(*prev_motion_end_pose, motion->body);
+	}
+	transition_count = 1000;
 }
 
 
@@ -84,6 +90,8 @@ MotionDeformationApp::~MotionDeformationApp()
 	if (second_motion)
 		delete  second_motion;
 
+	if (prev_motion_end_pose) 
+		delete prev_motion_end_pose;
 }
 
 //
@@ -755,15 +763,49 @@ void  MotionDeformationApp::Animation( float delta )
 	// 回転の影響を受けた座標系であれば回転後に足すのが一般的です
 	deformed_posture->root_pos = deformed_posture->root_pos + cumulative_pos;
 
+
+	// 配列外参照防止チェック
+	if (frame_no > 0 && frame_no < distanceinfo.size() - 1) {
+
+		// 1. 動作終了 (1 -> 0) を検知したら、その姿勢を保存
+		// ※「動作が終わった瞬間」の姿勢をキャッシュしておきます
+		if (distanceinfo[frame_no].movecheck == 0 && distanceinfo[frame_no - 1].movecheck == 1) {
+			*prev_motion_end_pose = *deformed_posture; // 現在の変形済み姿勢をコピー
+		}
+
+		// 2. 動作開始 (0 -> 1) を検知したら、遷移カウントをリセット
+		// ※ここから補間が始まります
+		if (distanceinfo[frame_no].movecheck == 1 && distanceinfo[frame_no - 1].movecheck == 0) {
+			transition_count = 0;
+		}
+	}
+
+	// 3. 遷移期間中 (20フレーム以内) なら、PostureWarpingで補間
+	if (transition_count < 20) {
+
+		// 残りの重みを計算 (1.0 -> 0.0 へ線形に変化)
+		// ratio = 1.0 のとき 前の姿勢(prev) 100%
+		// ratio = 0.0 のとき 現在の姿勢(current) 100%
+		float ratio = (20.0f - (float)transition_count) / 20.0f;
+
+		PostureWarping(
+			*deformed_posture,      // org: ベースは現在の姿勢
+			*deformed_posture,      // src: 差分の基準も現在の姿勢
+			*prev_motion_end_pose,  // dest: 目標は「前の動作の終了姿勢」
+			ratio,                  // ratio: 前の姿勢の重み
+			*deformed_posture       // out: 結果を上書き
+		);
+
+		// フレームを進める（on_animationのときだけ進むように判定してもいいですが、
+		// Animation関数が呼ばれてる時点で時間は進んでいるのでインクリメントします）
+		transition_count++;
+	}
+
 	// 動作変形後のデータを取得
 	ExportMotionData();
 
 	// ２つ目の動作の姿勢を取得
  	second_motion->GetPosture(animation_time, *second_curr_posture);
-
-	//std::cout << "org_Posture: root_pos.x = " << org_posture->root_pos.x << std::endl;
-	//std::cout << "second_curr_Posture: root_pos.x = " << second_curr_posture->root_pos.x << std::endl;
-
 }
 
 

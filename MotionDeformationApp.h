@@ -175,10 +175,9 @@ class  MotionDeformationApp : public InverseKinematicsCCDApp
 	bool is_smoothing_initialized = false;    // 初期化フラグ
 
   protected:
-	// ▼▼▼ 追加：サイクル間オフセット用 ▼▼▼
-	//std::vector<Quat4f> cycle_joint_offsets; // 前の周回から引き継いだ回転ズレ
-	//Vector3f cycle_root_offset;              // 前の周回から引き継いだ位置ズレ（累積済みだが念のため）
-	//bool is_cycle_offset_initialized = false;
+	// 【追加】動作遷移のためのキャッシュ変数
+	Posture* prev_motion_end_pose; // 前の動作終了時の姿勢を保存
+	int transition_count;          // 遷移アニメーション用のカウンタ
 
 	// ▼▼▼ 追加：区間引き継ぎ用の変数 ▼▼▼
 	std::vector<Quat4f> base_joint_offsets;      // 確定した「姿勢のベース（ズレ）」
