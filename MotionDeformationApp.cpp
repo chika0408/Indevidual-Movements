@@ -28,6 +28,7 @@
 #include <random>
 #include <numeric> // std::accumulate用
 #include <cmath>   // std::pow用
+#include <Quat4.h>
 
 // windowsの機能利用のため
 #ifdef _WIN32
@@ -676,8 +677,14 @@ void  MotionDeformationApp::Keyboard( unsigned char key, int mx, int my )
 		// 出力書き込み処理
 		outputfile << kire << ",";
 		for (int i = 0; i < 7; i++) {
-			outputfile << furi[i] << (i == 6 ? "" : ",");
+			outputfile << furi[i] << ",";
 		}
+		
+		outputfile << timewarp_deformation.bezier_control1.x << ",";
+		outputfile << timewarp_deformation.bezier_control1.y << ",";
+		outputfile << timewarp_deformation.bezier_control2.x << ",";
+		outputfile << timewarp_deformation.bezier_control2.y ;
+		
 		outputfile << "\n";
 		outputfile.close();
 	}
@@ -747,7 +754,6 @@ void  MotionDeformationApp::Animation( float delta )
 	// 2. 位置の適用: (現在の位置) + (累積位置)
 	// 回転の影響を受けた座標系であれば回転後に足すのが一般的です
 	deformed_posture->root_pos = deformed_posture->root_pos + cumulative_pos;
-
 
 	// 動作変形後のデータを取得
 	ExportMotionData();
@@ -840,7 +846,7 @@ void  MotionDeformationApp::InitMotion( int no )
 		//LoadBVH("radio_middle_2_Char00.bvh"); //4
 
 		//LoadBVH("pointshort_Char00.bvh");
-		LoadBVH("radio_new_3_Char00.bvh");
+		LoadBVH("radio_new_4_Char00.bvh");
 		LoadSecondBVH("radio_long_4_Char00.bvh");
 
 		//LoadSecondBVH("steplong_Char00.bvh");
@@ -1290,6 +1296,7 @@ void  MotionDeformationApp::EstimateParameters(float input_furi, float input_kir
 	}
 
 	// 推定値をタイムワーピングパラメータに適用
+	// 値を0.0～1.0の範囲に収める
 	auto clamp = [](float v) { return (v < 0.0f) ? 0.0f : ((v > 1.0f) ? 1.0f : v); };
 
 	timewarp_deformation.bezier_control1.x = clamp(estimated_vals[0]);
@@ -1958,8 +1965,8 @@ float Warping(float now_time, TimeWarpingParam& deform)
 	Point2f half1,half2;
 
 	// 制御点の座標を求める
-	half1.x = 0.05f;
-	half2.x = 0.95f;
+	half1.x = 0.2f;
+	half2.x = 0.8f;
 
 	half1.y = 0.0f;
 	half2.y = 1.0f;
@@ -1967,6 +1974,10 @@ float Warping(float now_time, TimeWarpingParam& deform)
 	// 制御点の座標を求める
 	/*half1 = deform.bezier_control1;
 	half2 = deform.bezier_control2;*/
+
+	// データセット作成時
+	deform.bezier_control1 = half1;
+	deform.bezier_control2 = half2;
 
 	// ベジェ曲線のパラメータtを求める(二分探索による近似値)
 	float lower = 0.0f;
@@ -2616,10 +2627,6 @@ Motion *  GenerateDeformedMotion( const MotionWarpingParam & deform, const Motio
 //
 float  ApplyMotionDeformation( float time, const MotionWarpingParam & deform, Motion& motion, Posture & input_pose, TimeWarpingParam time_param, Posture & output_pose )
 {
-	// タイムワーピング後の現在時刻と姿勢を計算
-	//float warping_time = Warping(time, time_param);
-	//motion.GetPosture(warping_time, input_pose);
-
 	// タイムワーピング後の現在時刻
 	float warping_time = 0.00;
 
@@ -2638,8 +2645,6 @@ float  ApplyMotionDeformation( float time, const MotionWarpingParam & deform, Mo
 		motion.GetPosture(time, warping_pose);
 	}
 
-	//printf("%f\n", warping_time);
-
 	// 動作変形の範囲外であれば、入力姿勢を出力姿勢とする
 	if ( ( warping_time < deform.key_time - deform.blend_in_duration ) || 
 	     ( warping_time > deform.key_time + deform.blend_out_duration ) )
@@ -2649,17 +2654,69 @@ float  ApplyMotionDeformation( float time, const MotionWarpingParam & deform, Mo
 	}
 
 	// 姿勢変形（動作ワーピング）の重みを計算
-	float  ratio = 0.0f;
-	if(warping_time <= deform.key_time)
-		ratio = (warping_time - deform.blend_in_duration) / (deform.key_time - deform.blend_in_duration);
-	if (warping_time > deform.key_time)
-		ratio = 1.0f;
+	//float  ratio = 0.0f;
+	//if(warping_time <= deform.key_time)
+	//	ratio = (warping_time - deform.blend_in_duration) / (deform.key_time - deform.blend_in_duration);
+	//if (warping_time > deform.key_time)
+	//	ratio = 1.0f;
 
 
-	// 姿勢変形（２つの姿勢の差分（dest - src）に重み ratio をかけたものを元の姿勢 org に加える ）
-	PostureWarping( warping_pose, deform.org_pose, deform.key_pose, ratio, output_pose );
+	//// 姿勢変形（２つの姿勢の差分（dest - src）に重み ratio をかけたものを元の姿勢 org に加える ）
+	//PostureWarping( warping_pose, deform.org_pose, deform.key_pose, ratio, output_pose );
 
-	return  ratio;
+	//return  ratio;
+
+	float ratio_pose = 0.0f; // 関節用（これは戻さないと骨折するので、とりあえず戻す設定にしておきます）
+	float ratio_root = 0.0f; // 移動用（これは 1.0 で固定します）
+
+	// 1. 行き（ブレンドイン ～ キーフレーム）
+	if (warping_time <= deform.key_time)
+	{
+		float denom = deform.key_time - deform.blend_in_duration;
+		if (denom > 0.0001f)
+			ratio_pose = (warping_time - deform.blend_in_duration) / denom;
+		else
+			ratio_pose = 0.0f;
+
+		// 行きは普通に変化させる
+		ratio_root = ratio_pose;
+	}
+	// 2. 帰り（キーフレーム ～ ブレンドアウト）
+	else
+	{
+		// 「最後まで変形しっぱなし（戻さない）」
+		ratio_pose = 1.0f;
+
+		// 「移動も維持しっぱなし」
+		ratio_root = 1.0f;
+	}
+
+	// クリッピング
+	if (ratio_pose < 0.0f) ratio_pose = 0.0f; if (ratio_pose > 1.0f) ratio_pose = 1.0f;
+	if (ratio_root < 0.0f) ratio_root = 0.0f; if (ratio_root > 1.0f) ratio_root = 1.0f;
+
+
+	// ▼▼▼ 適用処理 ▼▼▼
+
+	// 1. 関節の回転だけ PostureWarping で計算（ratio_pose使用）
+	// PostureWarpingは位置も補間してしまうので、後で位置だけ上書きします。
+	PostureWarping(warping_pose, deform.org_pose, deform.key_pose, ratio_pose, output_pose);
+
+	// 2. ルート位置（移動）を「絶対変位」で上書きする
+
+	// キーフレーム時点での「ズレの最大値」を計算
+	Vector3f max_diff = deform.key_pose.root_pos - deform.org_pose.root_pos;
+
+	// 現在の適用率（ratio_root）を掛ける
+	// 行きは 0.0 -> 1.0、帰りは ずっと 1.0
+	Vector3f current_diff;
+	current_diff.scale(ratio_root, max_diff);
+
+	// 元の軌道（warping_pose.root_pos）に、そのズレを足す
+	// これにより、動作後半は「元の軌道 + 最大のズレ」が維持され、平行移動した状態で進みます。
+	output_pose.root_pos = warping_pose.root_pos + current_diff;
+
+	return ratio_pose;
 }
 
 

@@ -576,18 +576,27 @@ void  MotionDeformationEditApp::Keyboard( unsigned char key, int mx, int my )
 		}
 
 		// 入力書き込み処理
-		outputfile << kire << "," << furi[0] << ","
+		outputfile << input_kire << "," << input_furi << ","
 			<< model_param.right_foot_dist << ","
 			<< model_param.left_foot_dist << ","
 			<< model_param.right_hand_dist << ","
 			<< model_param.left_hand_dist << ","
 			<< model_param.head_dist << ","
-			<< model_param.ChestVal << ",";
+			<< model_param.ChestVal << ","
+			<< model_param.moving_ratio << ","
+			<< model_param.interaction << ",";
 
+		// 出力書き込み処理
 		outputfile << kire << ",";
 		for (int i = 0; i < 7; i++) {
-			outputfile << furi[i] << (i == 6 ? "" : ",");
+			outputfile << furi[i] << ",";
 		}
+
+		outputfile << timewarp_deformation.bezier_control1.x << ",";
+		outputfile << timewarp_deformation.bezier_control1.y << ",";
+		outputfile << timewarp_deformation.bezier_control2.x << ",";
+		outputfile << timewarp_deformation.bezier_control2.y;
+
 		outputfile << "\n";
 		outputfile.close();
 	}

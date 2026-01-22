@@ -170,7 +170,22 @@ class  MotionDeformationApp : public InverseKinematicsCCDApp
 	// モーションワーピングの重み表示用
 	float		weight;
 
+	// ▼▼▼ 追加：関節ごとの「残響（姿勢オフセット）」保存用 ▼▼▼
+	vector<Quat4f> smoothed_joint_diffs; // 関節の回転ズレを滑らかに保持するバッファ
+	bool is_smoothing_initialized = false;    // 初期化フラグ
+
   protected:
+	// ▼▼▼ 追加：サイクル間オフセット用 ▼▼▼
+	//std::vector<Quat4f> cycle_joint_offsets; // 前の周回から引き継いだ回転ズレ
+	//Vector3f cycle_root_offset;              // 前の周回から引き継いだ位置ズレ（累積済みだが念のため）
+	//bool is_cycle_offset_initialized = false;
+
+	// ▼▼▼ 追加：区間引き継ぎ用の変数 ▼▼▼
+	std::vector<Quat4f> base_joint_offsets;      // 確定した「姿勢のベース（ズレ）」
+	std::vector<Quat4f> temp_last_frame_diffs;   // 前フレームの差分（一時保存用）
+	int prev_segment_index = -1;                 // 前フレームの区間番号
+	bool is_offset_initialized = false;          // 初期化フラグ
+
 	// 【追加】連続動作・高速化のためのキャッシュ変数
 	std::vector<Vector3f> cached_segment_pos_offsets; // 各動作区間の位置オフセット
 	std::vector<Quat4f>   cached_segment_rot_offsets; // 各動作区間の回転オフセット
