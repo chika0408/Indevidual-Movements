@@ -385,6 +385,12 @@ float  ApplyMotionDeformation( float time, const MotionWarpingParam & deform, Mo
 // 動作ワーピングの姿勢変形（２つの姿勢の差分（dest - src）に重み ratio をかけたものを元の姿勢 org に加える ）
 void  PostureWarping( const Posture & org, const Posture & src, const Posture & dest, float ratio, Posture & p );
 
+float ApplyMotionDeformation(float time, const MotionWarpingParam& deform, Motion& motion, Posture& input_pose, TimeWarpingParam time_param, const std::vector<DistanceParam>& distanceinfo, float* furi, Posture& output_pose);
 
+void GetPostureOffset(const Posture& org, const Posture& deformed, Motion& motion, std::vector<Quat4f>& diff_rots, Vector3f& diff_pos);
+
+float DotProduct(const Quat4f& q1, const Quat4f& q2);
+
+Quat4f Slerp(const Quat4f& q1, const Quat4f& q2, float t);
 
 #endif // _MOTION_DEFORMATION_APP_H_

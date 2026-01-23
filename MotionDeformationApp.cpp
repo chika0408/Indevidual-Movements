@@ -737,7 +737,8 @@ void  MotionDeformationApp::Animation( float delta )
 	ApplyTimeWarping(animation_time, timewarp_deformation, *motion, before_frame_time, *deformed_posture);
 
 	// 動作変形（動作ワーピング）の適用後の姿勢の計算
-	weight = ApplyMotionDeformation( animation_time, deformation, *motion, *deformed_posture, timewarp_deformation, *deformed_posture );
+	//weight = ApplyMotionDeformation( animation_time, deformation, *motion, *deformed_posture, timewarp_deformation, *deformed_posture );
+	weight = ApplyMotionDeformation(animation_time, deformation, *motion, *deformed_posture, timewarp_deformation, distanceinfo, furi, *deformed_posture);
 
 	// 【追加】過去の動作からの累積オフセットを取得して適用
 	Vector3f cumulative_pos;
@@ -762,44 +763,6 @@ void  MotionDeformationApp::Animation( float delta )
 	// 2. 位置の適用: (現在の位置) + (累積位置)
 	// 回転の影響を受けた座標系であれば回転後に足すのが一般的です
 	deformed_posture->root_pos = deformed_posture->root_pos + cumulative_pos;
-
-
-	// 配列外参照防止チェック
-	if (frame_no > 0 && frame_no < distanceinfo.size() - 1) {
-
-		// 1. 動作終了 (1 -> 0) を検知したら、その姿勢を保存
-		// ※「動作が終わった瞬間」の姿勢をキャッシュしておきます
-		if (distanceinfo[frame_no].movecheck == 0 && distanceinfo[frame_no - 1].movecheck == 1) {
-			*prev_motion_end_pose = *deformed_posture; // 現在の変形済み姿勢をコピー
-		}
-
-		// 2. 動作開始 (0 -> 1) を検知したら、遷移カウントをリセット
-		// ※ここから補間が始まります
-		if (distanceinfo[frame_no].movecheck == 1 && distanceinfo[frame_no - 1].movecheck == 0) {
-			transition_count = 0;
-		}
-	}
-
-	// 3. 遷移期間中 (20フレーム以内) なら、PostureWarpingで補間
-	if (transition_count < 20) {
-
-		// 残りの重みを計算 (1.0 -> 0.0 へ線形に変化)
-		// ratio = 1.0 のとき 前の姿勢(prev) 100%
-		// ratio = 0.0 のとき 現在の姿勢(current) 100%
-		float ratio = (20.0f - (float)transition_count) / 20.0f;
-
-		PostureWarping(
-			*deformed_posture,      // org: ベースは現在の姿勢
-			*deformed_posture,      // src: 差分の基準も現在の姿勢
-			*prev_motion_end_pose,  // dest: 目標は「前の動作の終了姿勢」
-			ratio,                  // ratio: 前の姿勢の重み
-			*deformed_posture       // out: 結果を上書き
-		);
-
-		// フレームを進める（on_animationのときだけ進むように判定してもいいですが、
-		// Animation関数が呼ばれてる時点で時間は進んでいるのでインクリメントします）
-		transition_count++;
-	}
 
 	// 動作変形後のデータを取得
 	ExportMotionData();
@@ -898,11 +861,6 @@ void  MotionDeformationApp::InitMotion( int no )
 		if ( !motion )
 			return;
 	}
-
-	// 以下、他のテストケースを追加する
-	/*else if ( no == 1 )
-	{
-	}*/
 }
 
 //
@@ -2007,11 +1965,11 @@ float Warping(float now_time, TimeWarpingParam& deform)
 	Point2f half1,half2;
 
 	// 制御点の座標を求める
-	half1.x = 0.2f;
-	half2.x = 0.8f;
+	half1.x = 0.0f;
+	half2.x = 1.0f;
 
-	half1.y = 0.0f;
-	half2.y = 1.0f;
+	half1.y = 0.2f;
+	half2.y = 0.8f;
 
 	// 制御点の座標を求める
 	/*half1 = deform.bezier_control1;
@@ -2655,7 +2613,8 @@ Motion *  GenerateDeformedMotion( const MotionWarpingParam & deform, const Motio
 		ApplyTimeWarping(t, current_time_param, motion, current_before_time, temp_posture);
 
 		// モーションワーピングを適用し、結果を deformed->frames[i] に格納
-		ApplyMotionDeformation(t, current_motion_param, const_cast<Motion&>(motion), temp_posture, current_time_param, deformed->frames[i]);
+		//ApplyMotionDeformation(t, current_motion_param, const_cast<Motion&>(motion), temp_posture, current_time_param, deformed->frames[i]);
+		ApplyMotionDeformation(t, current_motion_param, const_cast<Motion&>(motion), temp_posture, current_time_param, distance, furi, deformed->frames[i]);
 	}
 	// 動作変形後の動作を返す
 	return  deformed;
@@ -2667,98 +2626,371 @@ Motion *  GenerateDeformedMotion( const MotionWarpingParam & deform, const Motio
 //  動作変形（動作ワーピング）の適用後の姿勢の計算
 // （変形適用の重み 0.0～1.0 を返す）
 //
-float  ApplyMotionDeformation( float time, const MotionWarpingParam & deform, Motion& motion, Posture & input_pose, TimeWarpingParam time_param, Posture & output_pose )
+//float  ApplyMotionDeformation( float time, const MotionWarpingParam & deform, Motion& motion, Posture & input_pose, TimeWarpingParam time_param, Posture & output_pose )
+//{
+//	// タイムワーピング後の現在時刻
+//	float warping_time = 0.00;
+//
+//	// タイムワーピング処理後の現在時刻の姿勢
+//	Posture warping_pose;
+//
+//	// もし現在時刻にタイムワーピングを適用するなら
+//	if (time > time_param.warp_in_duration_time && time < time_param.warp_out_duration_time) {
+//		// タイムワーピング後の現在時刻を計算
+//		warping_time = Warping(time, time_param);
+//		// タイムワーピング後の現在時刻の姿勢を計算
+//		motion.GetPosture(warping_time, warping_pose);
+//	}
+//	else {
+//		warping_time = time;
+//		motion.GetPosture(time, warping_pose);
+//	}
+//
+//	// 動作変形の範囲外であれば、入力姿勢を出力姿勢とする
+//	if ( ( warping_time < deform.key_time - deform.blend_in_duration ) || 
+//	     ( warping_time > deform.key_time + deform.blend_out_duration ) )
+//	{
+//		output_pose = input_pose;
+//		return  0.0f;
+//	}
+//
+//	// 姿勢変形（動作ワーピング）の重みを計算
+//	//float  ratio = 0.0f;
+//	//if(warping_time <= deform.key_time)
+//	//	ratio = (warping_time - deform.blend_in_duration) / (deform.key_time - deform.blend_in_duration);
+//	//if (warping_time > deform.key_time)
+//	//	ratio = 1.0f;
+//
+//
+//	//// 姿勢変形（２つの姿勢の差分（dest - src）に重み ratio をかけたものを元の姿勢 org に加える ）
+//	//PostureWarping( warping_pose, deform.org_pose, deform.key_pose, ratio, output_pose );
+//
+//	//return  ratio;
+//
+//	float ratio_pose = 0.0f; // 関節用（これは戻さないと骨折するので、とりあえず戻す設定にしておきます）
+//	float ratio_root = 0.0f; // 移動用（これは 1.0 で固定します）
+//
+//	// 1. 行き（ブレンドイン ～ キーフレーム）
+//	if (warping_time <= deform.key_time)
+//	{
+//		float denom = deform.key_time - deform.blend_in_duration;
+//		if (denom > 0.0001f)
+//			ratio_pose = (warping_time - deform.blend_in_duration) / denom;
+//		else
+//			ratio_pose = 0.0f;
+//
+//		// 行きは普通に変化させる
+//		ratio_root = ratio_pose;
+//	}
+//	// 2. 帰り（キーフレーム ～ ブレンドアウト）
+//	else
+//	{
+//		//// 「最後まで変形しっぱなし（戻さない）」
+//		//ratio_pose = 1.0f;
+//
+//		//// 「移動も維持しっぱなし」
+//		//ratio_root = 1.0f;
+//
+//		float denom = deform.blend_out_duration - deform.key_time;
+//		if (denom != 0.0f)
+//			ratio_pose = (deform.blend_out_duration - warping_time) / denom;
+//
+//		ratio_root = 1.0f;
+//	}
+//
+//	// クリッピング
+//	if (ratio_pose < 0.0f) ratio_pose = 0.0f; if (ratio_pose > 1.0f) ratio_pose = 1.0f;
+//	if (ratio_root < 0.0f) ratio_root = 0.0f; if (ratio_root > 1.0f) ratio_root = 1.0f;
+//
+//
+//	// ▼▼▼ 適用処理 ▼▼▼
+//
+//	// 1. 関節の回転だけ PostureWarping で計算（ratio_pose使用）
+//	// PostureWarpingは位置も補間してしまうので、後で位置だけ上書きします。
+//	PostureWarping(warping_pose, deform.org_pose, deform.key_pose, ratio_pose, output_pose);
+//
+//	// 2. ルート位置（移動）を「絶対変位」で上書きする
+//
+//	// キーフレーム時点での「ズレの最大値」を計算
+//	Vector3f max_diff = deform.key_pose.root_pos - deform.org_pose.root_pos;
+//
+//	// 現在の適用率（ratio_root）を掛ける
+//	// 行きは 0.0 -> 1.0、帰りは ずっと 1.0
+//	Vector3f current_diff;
+//	current_diff.scale(ratio_root, max_diff);
+//
+//	// 元の軌道（warping_pose.root_pos）に、そのズレを足す
+//	// これにより、動作後半は「元の軌道 + 最大のズレ」が維持され、平行移動した状態で進みます。
+//	output_pose.root_pos = warping_pose.root_pos + current_diff;
+//
+//	return ratio_pose;
+//}
+
+
+
+// ---------------------------------------------------------
+// [追加] ヘルパー関数: クォータニオンのドット積
+// ---------------------------------------------------------
+float DotProduct(const Quat4f& q1, const Quat4f& q2) {
+	return q1.x * q2.x + q1.y * q2.y + q1.z * q2.z + q1.w * q2.w;
+}
+
+
+// ---------------------------------------------------------
+// [追加] ヘルパー関数: 球面線形補間 (Slerp)
+// q1 から q2 へ t (0.0~1.0) で補間する
+// ---------------------------------------------------------
+Quat4f Slerp(const Quat4f& q1, const Quat4f& q2, float t) {
+	Quat4f q2_target = q2;
+	float dot = DotProduct(q1, q2);
+
+	// 最短経路を通るための符号反転処理
+	if (dot < 0.0f) {
+		q2_target.set(-q2.x, -q2.y, -q2.z, -q2.w);
+		dot = -dot;
+	}
+
+	// ほとんど同じ向きなら線形補間で済ませる（ゼロ除算防止）
+	if (dot > 0.9995f) {
+		Quat4f result;
+		// 単純な線形補間 (Lerp)
+		result.x = q1.x + t * (q2_target.x - q1.x);
+		result.y = q1.y + t * (q2_target.y - q1.y);
+		result.z = q1.z + t * (q2_target.z - q1.z);
+		result.w = q1.w + t * (q2_target.w - q1.w);
+		// 正規化が必要ですが、微小なら省略可。気になるならここで正規化してください。
+		return result;
+	}
+
+	// Slerpの公式: sin((1-t)θ)/sinθ * q1 + sin(tθ)/sinθ * q2
+	float theta = acosf(dot);
+	float sin_theta = sinf(theta);
+
+	float w1 = sinf((1.0f - t) * theta) / sin_theta;
+	float w2 = sinf(t * theta) / sin_theta;
+
+	Quat4f result;
+	result.x = w1 * q1.x + w2 * q2_target.x;
+	result.y = w1 * q1.y + w2 * q2_target.y;
+	result.z = w1 * q1.z + w2 * q2_target.z;
+	result.w = w1 * q1.w + w2 * q2_target.w;
+
+	return result;
+}
+
+
+// [修正] 動作変形（動作ワーピング）の適用後の姿勢の計算
+float ApplyMotionDeformation(float time, const MotionWarpingParam& deform, Motion& motion, Posture& input_pose, TimeWarpingParam time_param, const std::vector<DistanceParam>& distanceinfo, float* furi, Posture& output_pose)
 {
-	// タイムワーピング後の現在時刻
-	float warping_time = 0.00;
-
-	// タイムワーピング処理後の現在時刻の姿勢
-	Posture warping_pose;
-
-	// もし現在時刻にタイムワーピングを適用するなら
-	if (time > time_param.warp_in_duration_time && time < time_param.warp_out_duration_time) {
-		// タイムワーピング後の現在時刻を計算
-		warping_time = Warping(time, time_param);
-		// タイムワーピング後の現在時刻の姿勢を計算
-		motion.GetPosture(warping_time, warping_pose);
-	}
-	else {
-		warping_time = time;
-		motion.GetPosture(time, warping_pose);
-	}
-
-	// 動作変形の範囲外であれば、入力姿勢を出力姿勢とする
-	if ( ( warping_time < deform.key_time - deform.blend_in_duration ) || 
-	     ( warping_time > deform.key_time + deform.blend_out_duration ) )
-	{
+	// 【安全対策1】distanceinfoが空なら何もせず帰る（クラッシュ防止）
+	if (distanceinfo.empty()) {
 		output_pose = input_pose;
-		return  0.0f;
+		return 0.0f;
 	}
 
-	// 姿勢変形（動作ワーピング）の重みを計算
-	//float  ratio = 0.0f;
-	//if(warping_time <= deform.key_time)
-	//	ratio = (warping_time - deform.blend_in_duration) / (deform.key_time - deform.blend_in_duration);
-	//if (warping_time > deform.key_time)
-	//	ratio = 1.0f;
+	// 1. タイムワーピング後の現在時刻を取得
+	float warping_time = time;
+	if (time > time_param.warp_in_duration_time && time < time_param.warp_out_duration_time) {
+		warping_time = Warping(time, time_param);
+	}
+
+	// ワーピング後の姿勢を取得（これをベースにする）
+	motion.GetPosture(warping_time, input_pose);
+	output_pose = input_pose; // 初期値としてコピー
+
+	// 2. 現在の区間のターゲットオフセットを計算 (Current Target)
+	std::vector<Quat4f> curr_diff_rots;
+	Vector3f curr_diff_pos;
+	GetPostureOffset(deform.org_pose, deform.key_pose, motion, curr_diff_rots, curr_diff_pos);
+
+	// 補間ターゲットの決定 (From -> To)
+	std::vector<Quat4f>* p_from_rots = nullptr;
+	Vector3f* p_from_pos = nullptr;
+	std::vector<Quat4f>* p_to_rots = nullptr;
+	Vector3f* p_to_pos = nullptr;
+
+	float time_start = 0.0f;
+	float time_end = 0.0f;
+
+	// 変数を保持するためのローカルバッファ
+	std::vector<Quat4f> neighbor_diff_rots;
+	Vector3f neighbor_diff_pos;
+
+	// 現在の動作開始時刻（フレーム）
+	int current_start_frame = (int)(deform.blend_in_duration / motion.interval);
+	// 【安全対策2】インデックスが範囲外に行かないよう厳密に制限
+	if (current_start_frame < 0) current_start_frame = 0;
+	if (current_start_frame >= (int)distanceinfo.size()) current_start_frame = (int)distanceinfo.size() - 1;
 
 
-	//// 姿勢変形（２つの姿勢の差分（dest - src）に重み ratio をかけたものを元の姿勢 org に加える ）
-	//PostureWarping( warping_pose, deform.org_pose, deform.key_pose, ratio, output_pose );
-
-	//return  ratio;
-
-	float ratio_pose = 0.0f; // 関節用（これは戻さないと骨折するので、とりあえず戻す設定にしておきます）
-	float ratio_root = 0.0f; // 移動用（これは 1.0 で固定します）
-
-	// 1. 行き（ブレンドイン ～ キーフレーム）
+	// --- ケース1: キーフレームより前 (Prev -> Curr) ---
 	if (warping_time <= deform.key_time)
 	{
-		float denom = deform.key_time - deform.blend_in_duration;
-		if (denom > 0.0001f)
-			ratio_pose = (warping_time - deform.blend_in_duration) / denom;
-		else
-			ratio_pose = 0.0f;
+		// To は Current
+		p_to_rots = &curr_diff_rots;
+		p_to_pos = &curr_diff_pos;
+		time_end = deform.key_time;
 
-		// 行きは普通に変化させる
-		ratio_root = ratio_pose;
+		// From は Previous を探す
+		int prev_seg_end = -1;
+		int prev_seg_start = -1;
+
+		// 過去へスキャン
+		int scanner = current_start_frame - 1;
+		while (scanner >= 0) {
+			if (distanceinfo[scanner].movecheck == 1) { prev_seg_end = scanner; break; }
+			scanner--;
+		}
+		if (prev_seg_end != -1) {
+			scanner = prev_seg_end;
+			while (scanner >= 0) {
+				if (distanceinfo[scanner].movecheck == 0) { prev_seg_start = scanner + 1; break; }
+				if (scanner == 0) { prev_seg_start = 0; break; }
+				scanner--;
+			}
+		}
+
+		if (prev_seg_start != -1 && prev_seg_end != -1) {
+			// 前の動作あり
+			float prev_mid_time = (prev_seg_start + prev_seg_end) * 0.5f * motion.interval;
+			MotionWarpingParam prev_param;
+			TimeWarpingParam dummy;
+			InitDeformationParameter(prev_mid_time, distanceinfo, prev_param, dummy, motion, furi);
+
+			GetPostureOffset(prev_param.org_pose, prev_param.key_pose, motion, neighbor_diff_rots, neighbor_diff_pos);
+			time_start = prev_param.key_time;
+		}
+		else {
+			// 前の動作なし（初期状態）
+			if (motion.body) neighbor_diff_rots.resize(motion.body->num_joints, Quat4f(0, 0, 0, 1));
+			neighbor_diff_pos.set(0, 0, 0);
+			time_start = 0.0f; // 便宜上0
+		}
+
+		p_from_rots = &neighbor_diff_rots;
+		p_from_pos = &neighbor_diff_pos;
 	}
-	// 2. 帰り（キーフレーム ～ ブレンドアウト）
+	// --- ケース2: キーフレームより後 (Curr -> Next) ---
 	else
 	{
-		// 「最後まで変形しっぱなし（戻さない）」
-		ratio_pose = 1.0f;
+		// From は Current
+		p_from_rots = &curr_diff_rots;
+		p_from_pos = &curr_diff_pos;
+		time_start = deform.key_time;
 
-		// 「移動も維持しっぱなし」
-		ratio_root = 1.0f;
+		// To は Next を探す
+		int next_seg_start = -1;
+		int next_seg_end = -1;
+
+		// 未来へスキャン
+		int scanner = current_start_frame;
+		// まず今の動作の終わりを探す
+		while (scanner < (int)distanceinfo.size()) {
+			if (distanceinfo[scanner].movecheck == 0) { break; } // 動作終了
+			scanner++;
+		}
+		// 隙間を飛ばして次の動作の始まりを探す
+		while (scanner < (int)distanceinfo.size()) {
+			if (distanceinfo[scanner].movecheck == 1) { next_seg_start = scanner; break; }
+			scanner++;
+		}
+		// 次の動作の終わりを探す
+		if (next_seg_start != -1) {
+			scanner = next_seg_start;
+			while (scanner < (int)distanceinfo.size()) {
+				if (distanceinfo[scanner].movecheck == 0) { next_seg_end = scanner - 1; break; }
+				if (scanner == (int)distanceinfo.size() - 1) { next_seg_end = scanner; break; }
+				scanner++;
+			}
+		}
+
+		if (next_seg_start != -1 && next_seg_end != -1) {
+			// 次の動作あり
+			float next_mid_time = (next_seg_start + next_seg_end) * 0.5f * motion.interval;
+			MotionWarpingParam next_param;
+			TimeWarpingParam dummy;
+			InitDeformationParameter(next_mid_time, distanceinfo, next_param, dummy, motion, furi);
+
+			GetPostureOffset(next_param.org_pose, next_param.key_pose, motion, neighbor_diff_rots, neighbor_diff_pos);
+			time_end = next_param.key_time;
+		}
+		else {
+			// 次の動作なし（元の姿勢に戻す）
+			// オフセット0（単位クォータニオン）へ戻す
+			if (motion.body) neighbor_diff_rots.resize(motion.body->num_joints, Quat4f(0, 0, 0, 1));
+			neighbor_diff_pos.set(0, 0, 0);
+
+			// 終了時刻は区間の終わりあたりを設定
+			// (次の動作がない＝これが最後の動作なので、blend_outあたりで0に戻す)
+			time_end = deform.blend_out_duration;
+		}
+
+		p_to_rots = &neighbor_diff_rots;
+		p_to_pos = &neighbor_diff_pos;
 	}
 
-	// クリッピング
-	if (ratio_pose < 0.0f) ratio_pose = 0.0f; if (ratio_pose > 1.0f) ratio_pose = 1.0f;
-	if (ratio_root < 0.0f) ratio_root = 0.0f; if (ratio_root > 1.0f) ratio_root = 1.0f;
+	// 4. オフセットの補間（Slerp）
+	// 5. 補間したオフセットを現在の姿勢(input_pose)に適用
+	float duration = time_end - time_start;
+	float ratio = 0.0f;
+
+	if (duration > 0.001f) {
+		ratio = (warping_time - time_start) / duration;
+	}
+	// 範囲制限
+	if (ratio < 0.0f) ratio = 0.0f;
+	if (ratio > 1.0f) ratio = 1.0f;
+
+	if (motion.body && p_from_rots && p_to_rots) {
+		for (int i = 0; i < motion.body->num_joints; i++)
+		{
+			// Slerp (From -> To)
+			Quat4f q_interpolated = Slerp((*p_from_rots)[i], (*p_to_rots)[i], ratio);
+
+			// 適用: NewRot = Offset * OrgRot
+			Quat4f q;
+			q.set(input_pose.joint_rotations[i]);
+			q_interpolated.mul(q);
+			output_pose.joint_rotations[i].set(q_interpolated);
+		}
+	}
+
+	if (p_from_pos && p_to_pos) {
+		Vector3f pos_interpolated;
+		pos_interpolated.x = p_from_pos->x * (1.0f - ratio) + p_to_pos->x * ratio;
+		pos_interpolated.y = p_from_pos->y * (1.0f - ratio) + p_to_pos->y * ratio;
+		pos_interpolated.z = p_from_pos->z * (1.0f - ratio) + p_to_pos->z * ratio;
+		output_pose.root_pos = input_pose.root_pos + pos_interpolated;
+	}
+
+	return ratio;
+}
 
 
-	// ▼▼▼ 適用処理 ▼▼▼
+// [追加] 姿勢間の差分（オフセット）を計算する関数
+// diff_rot: org から deformed への回転差分 (deformed * org^-1)
+// diff_pos: org から deformed への位置差分
+void GetPostureOffset(const Posture& org, const Posture& deformed, Motion& motion, std::vector<Quat4f>& diff_rots, Vector3f& diff_pos)
+{
+	diff_rots.resize(motion.body->num_joints);
 
-	// 1. 関節の回転だけ PostureWarping で計算（ratio_pose使用）
-	// PostureWarpingは位置も補間してしまうので、後で位置だけ上書きします。
-	PostureWarping(warping_pose, deform.org_pose, deform.key_pose, ratio_pose, output_pose);
+	// ルート位置の差分
+	diff_pos = deformed.root_pos - org.root_pos;
 
-	// 2. ルート位置（移動）を「絶対変位」で上書きする
+	// 各関節の回転差分
+	for (int i = 0; i < motion.body->num_joints; i++)
+	{
+		Quat4f q_org ;
+		q_org.set(org.joint_rotations[i]);
+		Quat4f q_def;
+		q_def.set(deformed.joint_rotations[i]);
 
-	// キーフレーム時点での「ズレの最大値」を計算
-	Vector3f max_diff = deform.key_pose.root_pos - deform.org_pose.root_pos;
+		// 逆回転（共役）
+		Quat4f q_org_inv(-q_org.x, -q_org.y, -q_org.z, q_org.w);
 
-	// 現在の適用率（ratio_root）を掛ける
-	// 行きは 0.0 -> 1.0、帰りは ずっと 1.0
-	Vector3f current_diff;
-	current_diff.scale(ratio_root, max_diff);
-
-	// 元の軌道（warping_pose.root_pos）に、そのズレを足す
-	// これにより、動作後半は「元の軌道 + 最大のズレ」が維持され、平行移動した状態で進みます。
-	output_pose.root_pos = warping_pose.root_pos + current_diff;
-
-	return ratio_pose;
+		// 差分 = Def * Org^-1
+		diff_rots[i].mul(q_def, q_org_inv);
+	}
 }
 
 
