@@ -227,12 +227,19 @@ void  MotionDeformationEditApp::Display()
 
 	// 現在編集中のパラメータを表示
 	char param_msg[128];
-	const char* part_names[] = { "R_Foot", "L_Foot", "R_Hand", "L_Hand", "Hips", "Chest", "Head", "Kire" };
+	const char* part_names[] = { "R_Foot", "L_Foot", "R_Hand", "L_Hand", "Hips", "Chest", "Head", "Kire", "Bez_C1.X", "Bez_C1.Y", "Bez_C2.X", "Bez_C2.Y" };
 
 	// 選択中の項目と値を表示
-	if (selected_param >= 0 && selected_param <= 7)
+	if (selected_param >= 0 && selected_param <= 11)
 	{
-		float val = (selected_param == 7) ? kire : furi[selected_param];
+		float val;
+		// 選択されている番号に応じて取得する変数を切り替えます
+		if (selected_param <= 6) val = furi[selected_param];
+		else if (selected_param == 7) val = kire;
+		else if (selected_param == 8) val = timewarp_deformation.bezier_control1.x;
+		else if (selected_param == 9) val = timewarp_deformation.bezier_control1.y;
+		else if (selected_param == 10) val = timewarp_deformation.bezier_control2.x;
+		else if (selected_param == 11) val = timewarp_deformation.bezier_control2.y;
 		sprintf(param_msg, "EDIT: %s = %.2f (Use [ / ] to change)", part_names[selected_param], val);
 		DrawTextInformation(4, param_msg);
 	}
@@ -413,6 +420,26 @@ void  MotionDeformationEditApp::Keyboard( unsigned char key, int mx, int my )
 	{
 		selected_param = 7;
 	}
+	// Shift + 1 (!) でベジェ制御点1のxを選択
+	else if (key == '!')
+	{
+		selected_param = 8;
+	}
+	// Shift + 2 (") でベジェ制御点1のyを選択
+	else if (key == '\"')
+	{
+		selected_param = 9;
+	}
+	// Shift + 3 (#) でベジェ制御点2のxを選択
+	else if (key == '#')
+	{
+		selected_param = 10;
+	}
+	// Shift + 4 ($) でベジェ制御点2のyを選択
+	else if (key == '$')
+	{
+		selected_param = 11;
+	}
 
 	//  レベルの増減 ( [ キーで減少、 ] キーで増加 )
 	if (key == '[' || key == ']' || key == '{' || key == '}')
@@ -432,6 +459,22 @@ void  MotionDeformationEditApp::Keyboard( unsigned char key, int mx, int my )
 		else if (selected_param >= 0 && selected_param < 7) // フリレベル
 		{
 			furi[selected_param] += delta;
+		}
+		else if (selected_param == 8) // ベジェ曲線1.x
+		{
+			timewarp_deformation.bezier_control1.x += delta;
+		}
+		else if (selected_param == 9) // ベジェ曲線1.y
+		{
+			timewarp_deformation.bezier_control1.y += delta;
+		}
+		else if (selected_param == 10) // ベジェ曲線2.x
+		{
+			timewarp_deformation.bezier_control2.x += delta;
+		}
+		else if (selected_param == 11) // ベジェ曲線2.y
+		{
+			timewarp_deformation.bezier_control2.y += delta;
 		}
 
 		// タイムラインの情報を更新
@@ -537,17 +580,46 @@ void  MotionDeformationEditApp::Keyboard( unsigned char key, int mx, int my )
 			// ポップアップ（コンソール注視）で入力を促す
 			kire = ShowPopupInput("Kire Setting", "Enter new Kire value:", input_kire);
 		}
+		// ベジェ曲線の制御点を個別に設定できるように追加します
+		else if (selected_param == 8) {
+			// 制御点1のx座標を入力
+			timewarp_deformation.bezier_control1.x = ShowPopupInput("Bezier C1.X", "Value (0.0-1.0):", timewarp_deformation.bezier_control1.x);
+		}
+		else if (selected_param == 9) {
+			// 制御点1のy座標を入力
+			timewarp_deformation.bezier_control1.y = ShowPopupInput("Bezier C1.Y", "Value (0.0-1.0):", timewarp_deformation.bezier_control1.y);
+		}
+		else if (selected_param == 10) {
+			// 制御点2のx座標を入力
+			timewarp_deformation.bezier_control2.x = ShowPopupInput("Bezier C2.X", "Value (0.0-1.0):", timewarp_deformation.bezier_control2.x);
+		}
+		else if (selected_param == 11) {
+			// 制御点2 of y座標を入力
+			timewarp_deformation.bezier_control2.y = ShowPopupInput("Bezier C2.Y", "Value (0.0-1.0):", timewarp_deformation.bezier_control2.y);
+		}
 		else if (selected_param >= 0 && selected_param < 7) { // 各部位のフリの選択中
 			const char* names[] = { "R_Foot", "L_Foot", "R_Hand", "L_Hand", "Hips", "Chest", "Head" };
 			furi[selected_param] = ShowPopupInput("Furi Setting", names[selected_param], input_furi);
 		}
 
+
 		std::cout << ">> Updated! Press 's' to resume." << std::endl;
 	}
 
 	// r キーで姿勢をリセット
-	if ( key == 'r' )
+	if (key == 'r')
+	{
+		// キレレベルをリセット
+		kire = 1.0f;
+
+		// 各部位のフリレベルをすべてリセット
+		for (int i = 0; i < 7; i++) {
+			furi[i] = 1.0f;
+		}
+
+		// リセット処理（Start）
 		Start();
+	}
 
 	// o キーで変形後の動作を保存
 	if (key == 'o')
