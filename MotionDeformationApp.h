@@ -182,15 +182,16 @@ class  MotionDeformationApp : public InverseKinematicsCCDApp
 
 	// 接地でロックしているかどうかのフラグ
 	// Trueのときはロック中
-	bool r_foot_lock;
-	bool l_foot_lock;
+	bool		r_foot_lock;
+	bool		l_foot_lock;
 
 	// 接地している足の座標
-	Point3f fixed_r_foot_pos;
-	Point3f fixed_l_foot_pos;
+	Point3f		fixed_r_foot_pos;
+	Point3f		fixed_l_foot_pos;
 
 	// 前のフレームの腰の位置
 	Point3f prev_output_root_pos;
+	Point3f prev_input_root_pos;
 
 	// ▼▼▼ 追加：関節ごとの「残響（姿勢オフセット）」保存用 ▼▼▼
 	vector<Quat4f> smoothed_joint_diffs; // 関節の回転ズレを滑らかに保持するバッファ
@@ -238,6 +239,9 @@ class  MotionDeformationApp : public InverseKinematicsCCDApp
 
 	// 現在の表示フレーム番号
 	int                frame_no;
+
+	// ループを示すフラグ
+	bool			   is_loop;
 
   protected:
 	// 画面描画のための変数
@@ -399,7 +403,7 @@ void UpdateKeyposeByVelocity(MotionWarpingParam& param, Motion& motion, float fu
 void QuatToEulerYXZ(const Quat4f& q, double& y, double& x, double& z);
 
 // 動作変形（動作ワーピング）の適用後の動作を生成
-Motion *  GenerateDeformedMotion( const MotionWarpingParam & deform, const Motion & motion , const vector<DistanceParam>& distance, HumanBody* my_human_body, Point3f& fixed_r_foot_pos, Point3f& fixed_l_foot_pos, bool r_foot_lock, bool l_foot_lock, Point3f& prev_output_root_pos, float kire, float* furi);
+Motion *  GenerateDeformedMotion( const MotionWarpingParam & deform, const Motion & motion , const vector<DistanceParam>& distance, HumanBody* my_human_body, Point3f& fixed_r_foot_pos, Point3f& fixed_l_foot_pos, bool& r_foot_lock, bool& l_foot_lock, Point3f& prev_output_root_pos, Point3f& prev_input_root_pos, bool is_loop, float kire, float* furi);
 
 // 動作変形（動作ワーピング）の適用後の姿勢の計算
 float  ApplyMotionDeformation( float time, const MotionWarpingParam & deform, Motion& motion, Posture & input_pose, TimeWarpingParam time_param, Posture & output_pose );
@@ -408,7 +412,8 @@ float  ApplyMotionDeformation( float time, const MotionWarpingParam & deform, Mo
 void  PostureWarping( const Posture & org, const Posture & src, const Posture & dest, float ratio, Posture & p );
 
 float ApplyMotionDeformation(float time, const MotionWarpingParam& deform, Motion& motion, Posture& input_pose, TimeWarpingParam time_param,
-	const std::vector<DistanceParam>& distanceinfo, float* furi, HumanBody* human_body, Point3f& r_fixed_pos, Point3f& l_fixed_pos, bool r_foot_lock, bool l_foot_lock, Point3f& prev_output_root_pos, Posture& output_pose);
+	const std::vector<DistanceParam>& distanceinfo, float* furi, HumanBody* human_body, Point3f& r_fixed_pos, Point3f& l_fixed_pos, 
+	bool& r_foot_lock, bool& l_foot_lock, Point3f& prev_output_root_pos, Point3f& prev_input_root_pos, Posture& output_pose, bool is_loop);
 
 void GetPostureOffset(const Posture& org, const Posture& deformed, Motion& motion, std::vector<Quat4f>& diff_rots, Vector3f& diff_pos);
 

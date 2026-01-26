@@ -28,8 +28,8 @@ df.columns = [
     'target_kire',
     'target_furi_0', 'target_furi_1', 'target_furi_2', 'target_furi_3',
     'target_furi_4', 'target_furi_5', 'target_furi_6',
-    'target_bz_1x', 'target_bz_1y',
-    'target_bz_2x', 'target_bz_2y'
+    'target_bz_0', 'target_bz_1',
+    'target_bz_2', 'target_bz_3'
 ]
 
 X_raw = df[['input_sharpness', 'input_magnitude',
