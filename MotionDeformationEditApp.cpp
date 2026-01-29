@@ -165,7 +165,7 @@ void  MotionDeformationEditApp::Display()
 		//	glTranslatef(root_diff.x, root_diff.y, root_diff.z);
 
 		//	glEnable(GL_BLEND);
-		//	glColor4f(1.0f, 0.0f, 1.0f, 0.5f);
+		//	glColor3f(1.0f, 1.0f, 1.0f);
 		//	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		//	DrawPosture(*second_curr_posture);
 		//	DrawPostureShadow(*second_curr_posture, shadow_dir, shadow_color);

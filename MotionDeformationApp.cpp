@@ -330,8 +330,8 @@ void  MotionDeformationApp::Initialize()
 	furi[6] = 1.0f;
 	kire = 1.0f;
 
-	input_kire = 10.0f;
-	input_furi = 10.0f;
+	input_kire = 0.0f;
+	input_furi = -10.0f;
 
 	// ベジェ制御点の初期化
 	timewarp_deformation.bezier_control1 = Point2f(0.0f, 0.0f);
@@ -354,6 +354,9 @@ void  MotionDeformationApp::Initialize()
 
 	//　Python学習と結果読み込み
 	int ret = system("python train_model.py");
+	////  検証時はこっちも
+	//int validation = system("python cross_validation.py");
+
 	if (ret == 0) {
 		std::ifstream infile("model_params.txt");
 		if (infile.is_open()) {
@@ -882,7 +885,7 @@ void  MotionDeformationApp::Animation( float delta )
 
 	// 動作変形（動作ワーピング）の適用後の姿勢の計算
 	//weight = ApplyMotionDeformation( animation_time, deformation, *motion, *deformed_posture, timewarp_deformation, *deformed_posture );
-	weight = ApplyMotionDeformation(animation_time, deformation, *motion, *deformed_posture, timewarp_deformation, distanceinfo, furi, my_human_body, fixed_r_foot_pos, fixed_l_foot_pos, r_foot_lock, l_foot_lock, prev_output_root_pos, prev_input_root_pos, *deformed_posture, is_loop);
+	weight = ApplyMotionDeformation(animation_time, deformation, *motion, *deformed_posture, timewarp_deformation, distanceinfo, furi, my_human_body, fixed_r_foot_pos, fixed_l_foot_pos, r_foot_lock, l_foot_lock, prev_output_root_pos, prev_input_root_pos, *deformed_posture, is_loop, kire);
 
 	//// 【追加】過去の動作からの累積オフセットを取得して適用
 	//Vector3f cumulative_pos;
@@ -989,16 +992,15 @@ void  MotionDeformationApp::InitMotion( int no )
 	if ( no == 0 )
 	{
 		// サンプルBVH動作データを読み込み
-		//LoadBVH( "stepshort_new_Char00.bvh" ); //3
-		//LoadBVH("radio_middle_3_Char00.bvh"); //4
-		//LoadBVH("fight_punch.bvh"); //4
-		//LoadBVH("radio_middle_2_Char00.bvh"); //4
+		//LoadBVH( "stepshort_new_Char00.bvh" ); 
+		//LoadBVH("radio_middle_3_Char00.bvh"); 
+		//LoadBVH("fight_punch.bvh"); 
+		//LoadBVH("radio_middle_2_Char00.bvh"); 
 
 		//LoadBVH("pointshort_Char00.bvh");
 		//LoadBVH("sample_walking2.bvh");
-		LoadBVH("radio_new_7_Char00.bvh");
-		//LoadBVH("good1.bvh");
-		LoadSecondBVH("radio_long_4_Char00.bvh");
+		LoadBVH("radio_new_6_Char00.bvh");
+		LoadSecondBVH("radio_middle_3_Char00.bvh");
 
 		//LoadSecondBVH("steplong_Char00.bvh");
 		//LoadSecondBVH("radio_long_3_Char00.bvh");
@@ -1380,11 +1382,15 @@ void  MotionDeformationApp::SaveDeformedMotionAsBVH( const char * file_name )
 
 			data[f * num_channels + c] = value;
 		}
+
+		// 保存実行
+		template_bvh.SetMotion(num_frames, deformed_motion->interval, data);
+		template_bvh.Save(file_name);
 	}
 
 	// 保存実行
-	template_bvh.SetMotion(num_frames, deformed_motion->interval, data);
-	template_bvh.Save(file_name);
+	//template_bvh.SetMotion(num_frames, deformed_motion->interval, data);
+	//template_bvh.Save(file_name);
 
 	delete[] data;
 	delete deformed_motion;
@@ -2686,7 +2692,7 @@ void UpdateKeyposeByVelocity(MotionWarpingParam& param, Motion& motion, float fu
 	float move_scale = (furi[0] + furi[1]) / 2.0f;
 
 	// 元の動作における移動ベクトル（速度）を計算
-	// (現在のフレームの位置 - 1フレーム前の位置)
+	// (現在のフレームの位置 - 1フレーム前の位置
 	Vector3f root_velocity;
 	root_velocity = param.org_pose.root_pos - before_posture.root_pos;
 
@@ -2769,7 +2775,7 @@ Motion *  GenerateDeformedMotion( const MotionWarpingParam & deform, const Motio
 
 		// モーションワーピングを適用し、結果を deformed->frames[i] に格納
 		//ApplyMotionDeformation(t, current_motion_param, const_cast<Motion&>(motion), temp_posture, current_time_param, deformed->frames[i]);
-		ApplyMotionDeformation(t, current_motion_param, const_cast<Motion&>(motion), temp_posture, current_time_param, distance, furi, my_human_body, fixed_r_foot_pos, fixed_l_foot_pos, r_foot_lock, l_foot_lock, prev_output_root_pos, prev_input_root_pos, deformed->frames[i], is_loop);
+		ApplyMotionDeformation(t, current_motion_param, const_cast<Motion&>(motion), temp_posture, current_time_param, distance, furi, my_human_body, fixed_r_foot_pos, fixed_l_foot_pos, r_foot_lock, l_foot_lock, prev_output_root_pos, prev_input_root_pos, deformed->frames[i], is_loop, kire);
 	}
 	// 動作変形後の動作を返す
 	return  deformed;
@@ -2937,7 +2943,7 @@ Quat4f Slerp(const Quat4f& q1, const Quat4f& q2, float t) {
 // [修正] 動作変形（動作ワーピング）の適用後の姿勢の計算
 float ApplyMotionDeformation(float time, const MotionWarpingParam& deform, Motion& motion, Posture& input_pose, TimeWarpingParam time_param, 
 	const std::vector<DistanceParam>& distanceinfo, float* furi, HumanBody* human_body, Point3f& r_fixed_pos, Point3f& l_fixed_pos,
-	bool& r_foot_lock, bool& l_foot_lock, Point3f& prev_output_root_pos, Point3f& prev_input_root_pos, Posture& output_pose ,bool is_loop)
+	bool& r_foot_lock, bool& l_foot_lock, Point3f& prev_output_root_pos, Point3f& prev_input_root_pos, Posture& output_pose ,bool is_loop, float kire)
 {
 	// 【安全対策1】distanceinfoが空なら何もせず帰る（クラッシュ防止）
 	if (distanceinfo.empty()) {
@@ -3049,8 +3055,10 @@ float ApplyMotionDeformation(float time, const MotionWarpingParam& deform, Motio
 			// 前の動作あり
 			float prev_mid_time = (prev_seg_start + prev_seg_end) * 0.5f * motion.interval;
 			MotionWarpingParam prev_param;
-			TimeWarpingParam dummy;
-			InitDeformationParameter(prev_mid_time, distanceinfo, prev_param, dummy, motion, furi);
+			TimeWarpingParam prev_time_param;
+
+			InitTimeDeformationParameter(prev_mid_time, const_cast<vector<DistanceParam>&>(distanceinfo), prev_time_param, motion, kire);
+			InitDeformationParameter(prev_mid_time, distanceinfo, prev_param, prev_time_param, motion, furi);
 
 			GetPostureOffset(prev_param.org_pose, prev_param.key_pose, motion, neighbor_diff_rots, neighbor_diff_pos);
 			time_start = prev_param.key_time;
@@ -3103,8 +3111,9 @@ float ApplyMotionDeformation(float time, const MotionWarpingParam& deform, Motio
 			// 次の動作あり
 			float next_mid_time = (next_seg_start + next_seg_end) * 0.5f * motion.interval;
 			MotionWarpingParam next_param;
-			TimeWarpingParam dummy;
-			InitDeformationParameter(next_mid_time, distanceinfo, next_param, dummy, motion, furi);
+			TimeWarpingParam next_time_param;
+			InitTimeDeformationParameter(next_mid_time, const_cast<vector<DistanceParam>&>(distanceinfo), next_time_param, motion, kire);
+			InitDeformationParameter(next_mid_time, distanceinfo, next_param, next_time_param, motion, furi);
 
 			GetPostureOffset(next_param.org_pose, next_param.key_pose, motion, neighbor_diff_rots, neighbor_diff_pos);
 			time_end = next_param.key_time;
@@ -3126,148 +3135,29 @@ float ApplyMotionDeformation(float time, const MotionWarpingParam& deform, Motio
 
 	// 4. オフセットの補間（Slerp）
 	// 5. 補間したオフセットを現在の姿勢(input_pose)に適用
-	float duration = time_end - time_start;
-	float ratio = 0.0f;
+	//float duration = time_end - time_start;
+	//float ratio = 0.0f;
 
-	if (duration > 0.001f) {
-		ratio = (warping_time - time_start) / duration;
-	}
-	// 範囲制限
-	if (ratio < 0.0f) ratio = 0.0f;
-	if (ratio > 1.0f) ratio = 1.0f;
-
-	if (motion.body && p_from_rots && p_to_rots) {
-		for (int i = 0; i < motion.body->num_joints; i++)
-		{
-			// Slerp (From -> To)
-			Quat4f q_interpolated = Slerp((*p_from_rots)[i], (*p_to_rots)[i], ratio);
-
-			// 適用: NewRot = Offset * OrgRot
-			Quat4f q;
-			q.set(input_pose.joint_rotations[i]);
-			q_interpolated.mul(q);
-			output_pose.joint_rotations[i].set(q_interpolated);
-		}
-	}
-
-	//if (p_from_pos && p_to_pos) {
-	//	Vector3f pos_interpolated;
-	//	pos_interpolated.x = p_from_pos->x * (1.0f - ratio) + p_to_pos->x * ratio;
-	//	pos_interpolated.y = p_from_pos->y * (1.0f - ratio) + p_to_pos->y * ratio;
-	//	pos_interpolated.z = p_from_pos->z * (1.0f - ratio) + p_to_pos->z * ratio;
-	//	//output_pose.root_pos = input_pose.root_pos + pos_interpolated;
+	//if (duration > 0.001f) {
+	//	ratio = (warping_time - time_start) / duration;
 	//}
+	//// 範囲制限
+	//if (ratio < 0.0f) ratio = 0.0f;
+	//if (ratio > 1.0f) ratio = 1.0f;
 
+	//if (motion.body && p_from_rots && p_to_rots) {
+	//	for (int i = 0; i < motion.body->num_joints; i++)
+	//	{
+	//		// Slerp (From -> To)
+	//		Quat4f q_interpolated = Slerp((*p_from_rots)[i], (*p_to_rots)[i], ratio);
 
-
-	//// ワーピング後のフレーム番号を特定して、設計図を参照する
-	//int warping_frame = warping_time / motion.interval;
-	//if (warping_frame < 0) warping_frame = 0;
-	//if (warping_frame >= distanceinfo.size()) 
-	//	warping_frame = (int)distanceinfo.size() - 1;
-
-
-	//Posture before_org_pose;
-	//float before_warping_time = 0;
-	//if (time >= motion.interval)
-	//	before_warping_time = Warping(time - motion.interval, time_param);
-	//else
-	//	before_warping_time = Warping(0, time_param);
-	//motion.GetPosture(before_warping_time, before_org_pose);
-	//Vector3f original_velocity = deform.org_pose.root_pos - before_org_pose.root_pos;
-
-	//if (prev_output_root_pos.x == 0.00000f && prev_output_root_pos.y == 0.00000f && prev_output_root_pos.z == 0.000000f)
-	//	prev_output_root_pos = output_pose.root_pos;
-
-	//// 3. 接地状態に応じてルート位置を補正
-	//// prev_output_root_pos は前フレームの output_pose.root_pos です
-	//if (distanceinfo[warping_frame].is_r_foot_grounded && r_foot_lock) {
-	//	// 右足接地中は右足のフリ (furi[0]) でルートを引っ張ります
-	//	output_pose.root_pos = prev_output_root_pos + (original_velocity * furi[0]);
-	//}
-	//else if (distanceinfo[warping_frame].is_l_foot_grounded && l_foot_lock) {
-	//	// 左足接地中は左足のフリ (furi[1]) でルートを引っ張ります
-	//	output_pose.root_pos = prev_output_root_pos + (original_velocity * furi[1]);
-	//}
-	//// どちらも接地していない（空中の）場合は、平均値で進ませるのが自然ですね
-	//else {
-	//	float avg_furi = (furi[0] + furi[1]) / 2.0f;
-	//	output_pose.root_pos = prev_output_root_pos + (original_velocity * avg_furi);
-	//}
-
-
-	//// 関節番号を取得
-	//int r_foot_joint = human_body->GetPrimaryJoint(JOI_R_ANKLE);
-	//int l_foot_joint = human_body->GetPrimaryJoint(JOI_L_ANKLE);
-
-	//// --- 右足の制御 ---
-	//if (distanceinfo[warping_frame].is_r_foot_grounded) {
-	//	// 接地した瞬間（ロックがまだかかっていない時）に座標を保存
-	//	if (!r_foot_lock) {
-	//		// 現在の変形後姿勢から、今の右足のワールド座標を計算して保存
-	//		vector<Point3f> joi_pos;
-	//		vector<Matrix4f> seg_frames;
-	//		ForwardKinematics(output_pose, seg_frames, joi_pos);
-	//		r_fixed_pos = joi_pos[r_foot_joint];
-	//		r_foot_lock = true; // ロック開始
+	//		// 適用: NewRot = Offset * OrgRot
+	//		Quat4f q;
+	//		q.set(input_pose.joint_rotations[i]);
+	//		q_interpolated.mul(q);
+	//		output_pose.joint_rotations[i].set(q_interpolated);
 	//	}
-	//	// 保存した座標に足を縛り付ける。支点はルート(-1)です
-	//	ApplyInverseKinematicsCCD(output_pose, -1, r_foot_joint, r_fixed_pos);
 	//}
-	//else {
-	//	r_foot_lock = false; // 空中に浮いたらロック解除
-	//}
-
-	//// --- 左足の制御（右足と同じロジック） ---
-	//if (distanceinfo[warping_frame].is_l_foot_grounded) {
-	//	if (!l_foot_lock) {
-	//		vector<Point3f> joi_pos;
-	//		vector<Matrix4f> seg_frames;
-	//		ForwardKinematics(output_pose, seg_frames, joi_pos);
-	//		l_fixed_pos = joi_pos[l_foot_joint];
-	//		l_foot_lock = true;
-	//	}
-	//	ApplyInverseKinematicsCCD(output_pose, -1, l_foot_joint, l_fixed_pos);
-	//}
-	//else {
-	//	l_foot_lock = false;
-	//}
-
-	////  元の動作でのルートの移動ベクトル（速度）を計算
-	//// before_root_pos は前フレームの deform.org_pose.root_pos
-	//// Posture before_org_pose;
-	//// 1フレーム前のワーピング後の時間
-	////float before_warping_time = 0;
-	////if(time >= motion.interval)
-	////	before_warping_time = Warping(time - motion.interval, time_param);
-	////else
-	////	before_warping_time = Warping(0, time_param);
-	////motion.GetPosture(before_warping_time, before_org_pose);
-	////Vector3f original_velocity = deform.org_pose.root_pos - before_org_pose.root_pos;
-
-	////if (prev_output_root_pos.x == 0.00000f && prev_output_root_pos.y == 0.00000f && prev_output_root_pos.z == 0.000000f)
-	////	prev_output_root_pos = output_pose.root_pos;
-
-	////// 3. 接地状態に応じてルート位置を補正
-	////// prev_output_root_pos は前フレームの output_pose.root_pos です
-	////if (distanceinfo[warping_frame].is_r_foot_grounded && r_foot_lock) {
-	////	// 右足接地中は右足のフリ (furi[0]) でルートを引っ張ります
-	////	output_pose.root_pos = prev_output_root_pos + (original_velocity * furi[0]);
-	////}
-	////else if (distanceinfo[warping_frame].is_l_foot_grounded && l_foot_lock) {
-	////	// 左足接地中は左足のフリ (furi[1]) でルートを引っ張ります
-	////	output_pose.root_pos = prev_output_root_pos + (original_velocity * furi[1]);
-	////}
-	////// どちらも接地していない（空中の）場合は、平均値で進ませるのが自然ですね
-	////else {
-	////	float avg_furi = (furi[0] + furi[1]) / 2.0f;
-	////	output_pose.root_pos = prev_output_root_pos + (original_velocity * avg_furi);
-	////}
-
-	//// 4. 次のフレームのために現在の値を保存（忘れちゃダメですよ？）
-	//prev_output_root_pos = output_pose.root_pos;
-
-	//return ratio;
 
 // 1. ワーピング後のフレーム番号を特定
 int warping_frame = warping_time / motion.interval;
@@ -3295,19 +3185,18 @@ else if (current_furi >= 1.0f) {
 	current_furi = 1.0f + (current_furi - 1.0f) * 0.05f;
 }
 
-// XとZ（平面の移動）は積分値を更新
+// 積分値を更新
 output_pose.root_pos.x = prev_output_root_pos.x + (delta_move.x * current_furi);
 output_pose.root_pos.z = prev_output_root_pos.z + (delta_move.z * current_furi);
-
-// Y（高さ）は積分せず、今の姿勢の高さをそのまま使う（地面にめり込まないように）
-// もしジャンプ力も変えたいならYも積分ですが、まずはこれで滑りを止めましょう
-output_pose.root_pos.y = input_pose.root_pos.y;
+output_pose.root_pos.y = prev_output_root_pos.y + (delta_move.y * current_furi);
 
 // 4. 【ワーピングオフセットの適用】
+float duration = time_end - time_start;
+float ratio = 0.0f;
 if (p_from_pos && p_to_pos) {
 	// --- 回転の適用（ここは残します：体の向きや姿勢の変形に必要だから） ---
-	float duration = time_end - time_start;
-	float ratio = 0.0f;
+	//float duration = time_end - time_start;
+	//float ratio = 0.0f;
 	if (duration > 0.001f) {
 		ratio = (warping_time - time_start) / duration;
 	}

@@ -328,6 +328,7 @@ class  MotionDeformationApp : public InverseKinematicsCCDApp
 	void  EstimateParameters(float input_furi, float input_kire, ModelParam param);
 
 	void SetRandomTargets();
+
 };
 
 // 骨格に含まれる名前をチェックして、適切な部位名リストを作成する関数
@@ -413,7 +414,7 @@ void  PostureWarping( const Posture & org, const Posture & src, const Posture & 
 
 float ApplyMotionDeformation(float time, const MotionWarpingParam& deform, Motion& motion, Posture& input_pose, TimeWarpingParam time_param,
 	const std::vector<DistanceParam>& distanceinfo, float* furi, HumanBody* human_body, Point3f& r_fixed_pos, Point3f& l_fixed_pos, 
-	bool& r_foot_lock, bool& l_foot_lock, Point3f& prev_output_root_pos, Point3f& prev_input_root_pos, Posture& output_pose, bool is_loop);
+	bool& r_foot_lock, bool& l_foot_lock, Point3f& prev_output_root_pos, Point3f& prev_input_root_pos, Posture& output_pose, bool is_loop, float kire);
 
 void GetPostureOffset(const Posture& org, const Posture& deformed, Motion& motion, std::vector<Quat4f>& diff_rots, Vector3f& diff_pos);
 
