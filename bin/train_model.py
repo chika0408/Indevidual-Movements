@@ -1,5 +1,6 @@
 import pandas as pd
 from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import Ridge
 from sklearn.preprocessing import StandardScaler
 import sys
 import os
@@ -48,7 +49,7 @@ X_scaled = scaler.fit_transform(X_raw)
 # 学習と書き出し
 with open('model_params.txt', 'w') as f:
     # kire の学習
-    model_kire = LinearRegression()
+    model_kire =Ridge(alpha=10.0)
     model_kire.fit(X_scaled, df['target_kire'])
     # 係数10つと切片1つを書き出す (スペース区切り)
     f.write(f"{model_kire.coef_[0]} {model_kire.coef_[1]} {model_kire.coef_[2]} {model_kire.coef_[3]} \
@@ -59,7 +60,7 @@ with open('model_params.txt', 'w') as f:
     # furi[0]～furi[6] の学習
     for i in range(7):
         target_col = f'target_furi_{i}'
-        model_furi = LinearRegression()
+        model_furi = Ridge(alpha=10.0)
         model_furi.fit(X_scaled, df[target_col])
         f.write(f"{model_furi.coef_[0]} {model_furi.coef_[1]} {model_furi.coef_[2]} {model_furi.coef_[3]} \
                 {model_furi.coef_[4]} {model_furi.coef_[5]} {model_furi.coef_[6]} {model_furi.coef_[7]} \
@@ -69,7 +70,7 @@ with open('model_params.txt', 'w') as f:
     # ベジェ曲線の制御点の学習
     for i in range(4):
         target_col = f'target_bz_{i}'
-        model_bz = LinearRegression()
+        model_bz = Ridge(alpha=10.0)
         model_bz.fit(X_scaled, df[target_col])
         f.write(f"{model_bz.coef_[0]} {model_bz.coef_[1]} {model_bz.coef_[2]} {model_bz.coef_[3]} \
                 {model_bz.coef_[4]} {model_bz.coef_[5]} {model_bz.coef_[6]} {model_bz.coef_[7]} \

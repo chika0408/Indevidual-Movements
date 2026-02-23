@@ -331,7 +331,7 @@ void  MotionDeformationApp::Initialize()
 	kire = 1.0f;
 
 	input_kire = 0.0f;
-	input_furi = -10.0f;
+	input_furi = 0.0f;
 
 	// ベジェ制御点の初期化
 	timewarp_deformation.bezier_control1 = Point2f(0.0f, 0.0f);
@@ -354,8 +354,8 @@ void  MotionDeformationApp::Initialize()
 
 	//　Python学習と結果読み込み
 	int ret = system("python train_model.py");
-	////  検証時はこっちも
-	//int validation = system("python cross_validation.py");
+	//  検証時はこっちも
+	// int validation = system("python cross_validation.py");
 
 	if (ret == 0) {
 		std::ifstream infile("model_params.txt");
@@ -512,10 +512,10 @@ void  MotionDeformationApp::Display()
 
 	// 現在編集中のパラメータを表示
 	char param_msg[128];
-	const char* part_names[] = { "R_Foot", "L_Foot", "R_Hand", "L_Hand", "Hips", "Chest", "Head", "Kire", "Bez_C1.X", "Bez_C1.Y", "Bez_C2.X", "Bez_C2.Y" };
+	const char* part_names[] = { "R_Foot", "L_Foot", "R_Hand", "L_Hand", "Hips", "Chest", "Head", "Kire", "Bez_C1.X", "Bez_C1.Y", "Bez_C2.X", "Bez_C2.Y", "Kire", "Furi"};
 
 	// 選択中の項目と値を表示
-	if (selected_param >= 0 && selected_param <= 11) 
+	if (selected_param >= 0 && selected_param <= 13) 
 	{
 		float val;
 		// 選択されている番号に応じて取得する変数を切り替えます
@@ -525,6 +525,8 @@ void  MotionDeformationApp::Display()
 		else if (selected_param == 9) val = timewarp_deformation.bezier_control1.y;
 		else if (selected_param == 10) val = timewarp_deformation.bezier_control2.x;
 		else if (selected_param == 11) val = timewarp_deformation.bezier_control2.y;
+		else if (selected_param == 12) val = input_kire;
+		else if (selected_param == 13) val = input_furi;
 		sprintf(param_msg, "EDIT: %s = %.2f (Use [ / ] to change)", part_names[selected_param], val);
 		DrawTextInformation(4, param_msg); 
 	}
@@ -628,6 +630,16 @@ void  MotionDeformationApp::Keyboard( unsigned char key, int mx, int my )
 	{
 		selected_param = 11;
 	}
+	// Shift + 5 (%) でinput_kireを選択
+	else if (key == '%')
+	{
+		selected_param = 12;
+	}
+	// Shift + 6 (&) でinput_furiを選択
+	else if (key == '&')
+	{
+		selected_param = 13;
+	}
 
 	//  レベルの増減 ( [ キーで減少、 ] キーで増加 )
 	if (key == '[' || key == ']' || key == '{' || key == '}')
@@ -663,6 +675,30 @@ void  MotionDeformationApp::Keyboard( unsigned char key, int mx, int my )
 		else if (selected_param == 11) // ベジェ曲線2.y
 		{
 			timewarp_deformation.bezier_control2.y += delta;
+		}
+		else if (selected_param == 12)
+		{
+			input_kire += delta;
+			if (input_kire <= -10) {
+				input_kire = -10;
+			}
+			else if (input_kire >= 10) {
+				input_kire = 10;
+			}
+			model_param.interaction = input_kire * input_furi;
+			EstimateParameters(input_furi, input_kire, model_param);
+		}
+		else if (selected_param == 13)
+		{
+			input_furi += delta;
+			if (input_furi <= -10) {
+				input_furi = -10;
+			}
+			else if (input_furi >= 10) {
+				input_furi = 10;
+			}
+			model_param.interaction = input_kire * input_furi;
+			EstimateParameters(input_furi, input_kire, model_param);
 		}
 
 		// タイムラインの情報を更新
@@ -759,8 +795,8 @@ void  MotionDeformationApp::Keyboard( unsigned char key, int mx, int my )
 			furi[selected_param] = ShowPopupInput("Furi Setting", names[selected_param], input_furi);
 		}
 
-
-		std::cout << ">> Updated! Press 's' to resume." << std::endl;
+		std::cout << ">> Updated!" << std::endl;
+		on_animation = true;
 	}
 
 	// r キーでリセット
@@ -992,16 +1028,15 @@ void  MotionDeformationApp::InitMotion( int no )
 	if ( no == 0 )
 	{
 		// サンプルBVH動作データを読み込み
-		//LoadBVH( "stepshort_new_Char00.bvh" ); 
 		//LoadBVH("radio_middle_3_Char00.bvh"); 
 		//LoadBVH("fight_punch.bvh"); 
-		//LoadBVH("radio_middle_2_Char00.bvh"); 
+		//LoadBVH("pointshort_Char00.bvh"); 
 
-		//LoadBVH("pointshort_Char00.bvh");
+		//LoadBVH("radio_long_3_Char00.bvh");
 		//LoadBVH("sample_walking2.bvh");
-		LoadBVH("radio_new_6_Char00.bvh");
-		LoadSecondBVH("radio_middle_3_Char00.bvh");
+		LoadBVH("radio_new_4_Char00.bvh");
 
+		LoadSecondBVH("radio_middle_1_Char00.bvh");
 		//LoadSecondBVH("steplong_Char00.bvh");
 		//LoadSecondBVH("radio_long_3_Char00.bvh");
 		//LoadSecondBVH("fight_punch_key.bvh");
@@ -2975,7 +3010,16 @@ float ApplyMotionDeformation(float time, const MotionWarpingParam& deform, Motio
 
 		// (B) 計算用：ワーピング後の時刻0の姿勢を基準点として保存する
 		// これをやらないと、Warping(0)が0でない場合に、そのズレが移動量として加算されてしまいます
-		float warped_zero_time = Warping(0.0f, time_param); // 時刻0がどう変形されるか計算
+		//float warped_zero_time = Warping(0.0f, time_param); // 時刻0がどう変形されるか計算
+		//Posture warped_zero_pose;
+		//motion.GetPosture(warped_zero_time, warped_zero_pose);
+		//prev_input_root_pos = warped_zero_pose.root_pos; // これを次の基準にする！
+
+		float warped_zero_time = 0.0f;
+		if (0.0f > time_param.warp_in_duration_time && 0.0f < time_param.warp_out_duration_time) {
+			warped_zero_time = Warping(0.0f, time_param); // 時刻0がどう変形されるか計算
+		}
+
 		Posture warped_zero_pose;
 		motion.GetPosture(warped_zero_time, warped_zero_pose);
 		prev_input_root_pos = warped_zero_pose.root_pos; // これを次の基準にする！
@@ -3177,18 +3221,19 @@ else if (distanceinfo[warping_frame].is_l_foot_grounded && l_foot_lock) current_
 else current_furi = (furi[0] + furi[1]) / 2.0f;
 
 // ★修正：furiの大きさに応じた移動量の調整
-if (current_furi < 1.0f) {
-	// 2^(furi - 1) を計算
-	current_furi = 1.0f - (current_furi + 1.0f) * 0.05f;
-}
-else if (current_furi >= 1.0f) {
-	current_furi = 1.0f + (current_furi - 1.0f) * 0.05f;
-}
+//if (current_furi < 1.0f) {
+//	// 2^(furi - 1) を計算
+//	current_furi = 1.0f - (current_furi + 1.0f) * 0.05f;
+//}
+//else if (current_furi >= 1.0f) {
+//	current_furi = 1.0f + (current_furi - 1.0f) * 0.05f;
+//}
+//
+//// 積分値を更新
+//output_pose.root_pos.x = prev_output_root_pos.x + (delta_move.x * current_furi);
+//output_pose.root_pos.z = prev_output_root_pos.z + (delta_move.z * current_furi);
+//output_pose.root_pos.y = prev_output_root_pos.y + (delta_move.y * current_furi);
 
-// 積分値を更新
-output_pose.root_pos.x = prev_output_root_pos.x + (delta_move.x * current_furi);
-output_pose.root_pos.z = prev_output_root_pos.z + (delta_move.z * current_furi);
-output_pose.root_pos.y = prev_output_root_pos.y + (delta_move.y * current_furi);
 
 // 4. 【ワーピングオフセットの適用】
 float duration = time_end - time_start;
